@@ -4,6 +4,7 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { EmailService } from '../email/email.service';
 import { LoginDto, ResetPasswordDto, ForgotPasswordDto, VerifyCodeDto, RegisterDto, VerifyRegisterDto } from './dto/auth.dto';
+import { SyncGateway } from '../sync/sync.gateway';
 
 @Injectable()
 export class AuthService {
@@ -11,6 +12,7 @@ export class AuthService {
     private prisma: PrismaService,
     private jwtService: JwtService,
     private emailService: EmailService,
+    private syncGateway: SyncGateway,
   ) {}
 
   async login(dto: LoginDto) {
@@ -44,15 +46,34 @@ export class AuthService {
     }
 
     // Handle device fingerprint
-    const existingDevice = await this.prisma.device.findUnique({
-      where: { deviceFingerprint: dto.deviceFingerprint },
+    const existingDevice = await this.prisma.device.findFirst({
+      where: { userId: user.id },
     });
 
-    if (!existingDevice) {
-      await this.prisma.device.deleteMany({
-        where: { userId: user.id },
-      });
-      
+    if (existingDevice && existingDevice.deviceFingerprint !== dto.deviceFingerprint) {
+      // If user hasn't explicitly chosen to force login, throw conflict
+      if (!(dto as any).force) {
+        throw new BadRequestException({
+          statusCode: 409,
+          message: 'Tài khoản này đang được đăng nhập ở thiết bị khác.',
+          error: 'Conflict'
+        });
+      } else {
+        // Emit forceLogout to the old device before overwriting
+        this.syncGateway.emitToUser(user.id, 'forceLogout', { deviceId: existingDevice.deviceFingerprint });
+        
+        await this.prisma.device.deleteMany({
+          where: { userId: user.id },
+        });
+        
+        await this.prisma.device.create({
+          data: {
+            userId: user.id,
+            deviceFingerprint: dto.deviceFingerprint,
+          },
+        });
+      }
+    } else if (!existingDevice) {
       await this.prisma.device.create({
         data: {
           userId: user.id,
@@ -305,6 +326,8 @@ export class AuthService {
     await this.prisma.device.deleteMany({
       where: { userId: user.id }
     });
+    
+    this.syncGateway.emitToUser(user.id, 'forceLogout', { deviceId: 'all' });
 
     return { success: true };
   }

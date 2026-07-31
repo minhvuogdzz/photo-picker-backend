@@ -2,10 +2,14 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { PrismaService } from '../prisma/prisma.service';
 import { SubscriptionStatus, SubscriptionPlan, Role } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
+import { SyncGateway } from '../sync/sync.gateway';
 
 @Injectable()
 export class AdminService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private syncGateway: SyncGateway,
+  ) {}
 
   // 1. Get Dashboard Stats
   async getDashboardStats() {
@@ -59,18 +63,32 @@ export class AdminService {
     }
 
     if (!user.subscription) {
-      return this.prisma.subscription.create({
+      const sub = await this.prisma.subscription.create({
         data: {
           userId,
           ...updateData,
         }
       });
+      if (updateData.status === 'EXPIRED') {
+        this.syncGateway.emitToUser(userId, 'subscriptionExpired', {});
+      } else if (updateData.status === 'SUSPENDED') {
+        this.syncGateway.emitToUser(userId, 'accountSuspended', {});
+      }
+      return sub;
     }
 
-    return this.prisma.subscription.update({
+    const updatedSub = await this.prisma.subscription.update({
       where: { id: user.subscription.id },
       data: updateData,
     });
+
+    if (updateData.status === 'EXPIRED') {
+      this.syncGateway.emitToUser(userId, 'subscriptionExpired', {});
+    } else if (updateData.status === 'SUSPENDED') {
+      this.syncGateway.emitToUser(userId, 'accountSuspended', {});
+    }
+
+    return updatedSub;
   }
 
   // 4. Suspend User
@@ -91,15 +109,23 @@ export class AdminService {
     await this.prisma.device.deleteMany({
       where: { userId }
     });
+    
+    this.syncGateway.emitToUser(userId, 'accountSuspended', {});
 
     return { success: true };
   }
 
   // 5. Kick a specific device
   async kickDevice(deviceId: string) {
-    await this.prisma.device.delete({
+    const device = await this.prisma.device.findUnique({
       where: { id: deviceId }
     });
+    if (device) {
+      this.syncGateway.emitToUser(device.userId, 'forceLogout', { deviceId: device.deviceFingerprint });
+      await this.prisma.device.delete({
+        where: { id: deviceId }
+      });
+    }
     return { success: true };
   }
 
