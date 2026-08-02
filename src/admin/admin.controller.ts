@@ -44,4 +44,14 @@ export class AdminController {
   kickDevice(@Param('id') deviceId: string) {
     return this.adminService.kickDevice(deviceId);
   }
+
+  @Post('scan-expired')
+  scanExpired() {
+    return this.adminService.scanExpired();
+  }
+
+  @Post('notify-expiring')
+  notifyExpiring() {
+    return this.adminService.notifyExpiring();
+  }
 }

@@ -150,4 +150,61 @@ export class AdminService {
 
     return user;
   }
+
+  // 7. Scan and warn expired/crack users
+  async scanExpired() {
+    const expiredUsers = await this.prisma.user.findMany({
+      where: {
+        role: 'USER',
+        OR: [
+          { subscription: null },
+          { subscription: { status: { in: ['EXPIRED', 'INACTIVE', 'SUSPENDED'] } } },
+        ]
+      },
+      select: { id: true }
+    });
+
+    for (const user of expiredUsers) {
+      this.syncGateway.emitToUser(user.id, 'copyrightWarning', {
+        message: 'MVD Photoshop Academy warning: Tài khoản của bạn không có bản quyền hợp lệ hoặc đã hết hạn dùng thử.'
+      });
+    }
+
+    return { success: true, count: expiredUsers.length };
+  }
+
+  // 8. Notify expiring soon
+  async notifyExpiring() {
+    const users = await this.prisma.user.findMany({
+      where: { role: 'USER', subscription: { isNot: null } },
+      include: { subscription: true }
+    });
+
+    let count = 0;
+    const now = new Date();
+
+    for (const user of users) {
+      const sub = user.subscription;
+      if (!sub || !sub.expiresAt) continue;
+
+      const diffTime = new Date(sub.expiresAt).getTime() - now.getTime();
+      const daysRemaining = Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+
+      if (sub.status === 'TRIAL' && daysRemaining <= 3) {
+        this.syncGateway.emitToUser(user.id, 'trialExpiringSoon', {
+          daysRemaining,
+          message: `Tài khoản của bạn sẽ hết hạn dùng thử sau ${daysRemaining} ngày nữa.`
+        });
+        count++;
+      } else if (sub.status === 'ACTIVE' && daysRemaining <= 7) {
+        this.syncGateway.emitToUser(user.id, 'activeExpiringSoon', {
+          daysRemaining,
+          message: `Tài khoản của bạn sẽ hết hạn sau ${daysRemaining} ngày nữa. Hãy ấn nút đổi quyền lợi để yêu cầu key kích hoạt.`
+        });
+        count++;
+      }
+    }
+
+    return { success: true, count };
+  }
 }
