@@ -17,7 +17,9 @@ export class AdminService {
     const activeSubscriptions = await this.prisma.subscription.count({
       where: { status: { in: ['ACTIVE', 'LIFETIME'] } }
     });
-    const totalDevices = await this.prisma.device.count();
+    const totalDevices = await this.prisma.device.count({
+      where: { user: { role: 'USER' } }
+    });
 
     return { totalUsers, activeSubscriptions, totalDevices };
   }
