@@ -54,4 +54,23 @@ export class EmailService {
       return false;
     }
   }
+
+  async sendHtmlEmail(to: string, subject: string, html: string, attachments?: any[]) {
+    const mailOptions: nodemailer.SendMailOptions = {
+      from: `"Photo Picker Pro" <${process.env.SMTP_USER}>`,
+      to,
+      subject,
+      html,
+    };
+    if (attachments && attachments.length > 0) {
+      mailOptions.attachments = attachments;
+    }
+    try {
+      await this.transporter.sendMail(mailOptions);
+      return true;
+    } catch (error) {
+      console.error('Lỗi khi gửi email HTML:', error);
+      return false;
+    }
+  }
 }
