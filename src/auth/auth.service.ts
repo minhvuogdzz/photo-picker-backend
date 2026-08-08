@@ -119,6 +119,14 @@ export class AuthService {
       const expiresAt = new Date(user.subscription.expiresAt);
       const diffTime = expiresAt.getTime() - now.getTime();
       daysRemaining = Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+      
+      if (daysRemaining === 0 && user.subscription.status !== 'LIFETIME') {
+        await this.prisma.subscription.update({
+          where: { id: user.subscription.id },
+          data: { status: 'EXPIRED' }
+        });
+        user.subscription.status = 'EXPIRED';
+      }
     }
 
     return {
@@ -170,7 +178,7 @@ export class AuthService {
       }
     }
 
-    if (user.subscription?.status !== 'ACTIVE' && user.subscription?.status !== 'TRIAL' && user.subscription?.status !== 'LIFETIME') {
+    if (user.subscription?.status === 'SUSPENDED' || user.subscription?.status === 'CANCELLED') {
       throw new ForbiddenException('SUBSCRIPTION_INVALID');
     }
 
