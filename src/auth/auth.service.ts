@@ -187,9 +187,9 @@ export class AuthService {
       email: user.email,
       name: user.name,
       subscription: {
-        status: user.subscription.status,
-        plan: user.subscription.plan,
-        expiresAt: user.subscription.expiresAt,
+        status: user.subscription?.status || 'INACTIVE',
+        plan: user.subscription?.plan || 'STARTER',
+        expiresAt: user.subscription?.expiresAt || null,
         daysRemaining,
       },
       deviceId,
