@@ -67,4 +67,9 @@ export class SyncGateway implements OnGatewayConnection, OnGatewayDisconnect {
   emitToUser(userId: string, event: string, data: any) {
     this.server.to(userId).emit(event, data);
   }
+
+  broadcastEvent(event: string, data: any) {
+    this.server.emit(event, data);
+  }
 }
+

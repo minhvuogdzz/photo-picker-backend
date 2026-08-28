@@ -37,7 +37,7 @@ export class AdminService {
   }
 
   // 3. Extend or update subscription
-  async updateSubscription(userId: string, data: { plan?: SubscriptionPlan; status?: SubscriptionStatus; addDays?: number }) {
+  async updateSubscription(userId: string, data: { plan?: SubscriptionPlan; status?: SubscriptionStatus; addDays?: number; isPremium?: boolean }) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       include: { subscription: true }
@@ -46,8 +46,9 @@ export class AdminService {
     if (!user) throw new NotFoundException('User not found');
 
     const updateData: any = {};
-    if (data.plan) updateData.plan = data.plan;
-    if (data.status) updateData.status = data.status;
+    if (data.plan !== undefined) updateData.plan = data.plan;
+    if (data.status !== undefined) updateData.status = data.status;
+    if (data.isPremium !== undefined) updateData.isPremium = data.isPremium;
     
     if (data.addDays) {
       let currentExpiry = user.subscription?.expiresAt ? new Date(user.subscription.expiresAt) : new Date();
@@ -64,34 +65,38 @@ export class AdminService {
       }
     }
 
+    let resultSub;
     if (!user.subscription) {
-      const sub = await this.prisma.subscription.create({
+      resultSub = await this.prisma.subscription.create({
         data: {
           userId,
           ...updateData,
         }
       });
-      if (updateData.status === 'EXPIRED') {
-        this.syncGateway.emitToUser(userId, 'subscriptionExpired', {});
-      } else if (updateData.status === 'SUSPENDED') {
-        this.syncGateway.emitToUser(userId, 'accountSuspended', {});
-      }
-      return sub;
+    } else {
+      resultSub = await this.prisma.subscription.update({
+        where: { id: user.subscription.id },
+        data: updateData,
+      });
     }
 
-    const updatedSub = await this.prisma.subscription.update({
-      where: { id: user.subscription.id },
-      data: updateData,
-    });
-
+    // Realtime events
     if (updateData.status === 'EXPIRED') {
       this.syncGateway.emitToUser(userId, 'subscriptionExpired', {});
     } else if (updateData.status === 'SUSPENDED') {
       this.syncGateway.emitToUser(userId, 'accountSuspended', {});
+    } else {
+      this.syncGateway.emitToUser(userId, 'subscriptionUpdated', {
+        status: resultSub.status,
+        plan: resultSub.plan,
+        isPremium: resultSub.isPremium,
+        expiresAt: resultSub.expiresAt,
+      });
     }
 
-    return updatedSub;
+    return resultSub;
   }
+
 
   // 4. Suspend User
   async suspendUser(userId: string) {

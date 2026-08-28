@@ -14,7 +14,7 @@ export class LicenseController {
   @Roles(Role.ADMIN)
   @Post('generate')
   generateKeys(@Body() body: GenerateKeysDto) {
-    return this.licenseService.generateKeys(body.count, body.durationDays);
+    return this.licenseService.generateKeys(body.count, body.durationDays, body.keyType);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)

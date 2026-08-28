@@ -1,6 +1,7 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../email/email.service';
+import { KeyType } from '@prisma/client';
 import * as crypto from 'crypto';
 
 @Injectable()
@@ -17,17 +18,18 @@ export class LicenseService {
   }
 
   // Admin: Generate new keys
-  async generateKeys(count: number = 1, durationDays: number = 90) {
-    const keys: {key: string, durationDays: number}[] = [];
+  async generateKeys(count: number = 1, durationDays: number = 90, keyType: KeyType = 'ORIGINAL') {
+    const keys: { key: string; durationDays: number; keyType: KeyType }[] = [];
     for (let i = 0; i < count; i++) {
       keys.push({
         key: this.generateKeyString(),
-        durationDays
+        durationDays,
+        keyType: keyType || 'ORIGINAL',
       });
     }
 
     await this.prisma.licenseKey.createMany({
-      data: keys
+      data: keys,
     });
 
     return keys;
@@ -49,7 +51,7 @@ export class LicenseService {
   async activateKey(userId: string, keyString: string) {
     // Check if key exists and is UNUSED
     const licenseKey = await this.prisma.licenseKey.findUnique({
-      where: { key: keyString }
+      where: { key: keyString.trim().toUpperCase() }
     });
 
     if (!licenseKey) {
@@ -59,16 +61,16 @@ export class LicenseService {
       throw new BadRequestException('Mã key đã được sử dụng hoặc hết hạn.');
     }
 
-    // Check if user already has an active key? Requirement says "1 key per account" but maybe it means active at a time, or they can stack?
-    // "mỗi tài khoản chỉ được 1 key" -> We will just update their subscription and mark key as used by them.
-    
+    const isPremiumKey = licenseKey.keyType === 'PREMIUM';
+
     // Update User Subscription
     const subscription = await this.prisma.subscription.findUnique({
       where: { userId }
     });
 
-    if (subscription?.status === 'LIFETIME') {
-      throw new BadRequestException('Tài khoản của bạn đã là bản LIFETIME, không cần kích hoạt thêm.');
+    // If user is already LIFETIME and key is ORIGINAL, warn them. But if key is PREMIUM, upgrade them to Premium!
+    if (subscription?.status === 'LIFETIME' && !isPremiumKey && subscription?.isPremium) {
+      throw new BadRequestException('Tài khoản của bạn đã là bản LIFETIME Premium đầy đủ.');
     }
 
     // Calculate new expiration date (adding to existing if valid)
@@ -88,6 +90,10 @@ export class LicenseService {
       }
     });
 
+    // If existing sub is LIFETIME, preserve LIFETIME and grant isPremium
+    const newStatus = subscription?.status === 'LIFETIME' ? 'LIFETIME' : 'ACTIVE';
+    const newPlan = subscription?.plan || 'PROFESSIONAL';
+    const grantPremium = isPremiumKey || subscription?.isPremium || false;
 
     if (!subscription) {
       await this.prisma.subscription.create({
@@ -95,6 +101,7 @@ export class LicenseService {
           userId,
           status: 'ACTIVE',
           plan: 'PROFESSIONAL',
+          isPremium: grantPremium,
           expiresAt
         }
       });
@@ -102,35 +109,49 @@ export class LicenseService {
       await this.prisma.subscription.update({
         where: { id: subscription.id },
         data: {
-          status: 'ACTIVE',
-          plan: 'PROFESSIONAL',
-          expiresAt
+          status: newStatus,
+          plan: newPlan,
+          isPremium: grantPremium,
+          expiresAt: newStatus === 'LIFETIME' ? subscription.expiresAt : expiresAt
         }
       });
     }
 
-    return { success: true, message: 'Kích hoạt key thành công!', expiresAt };
+    return {
+      success: true,
+      message: isPremiumKey
+        ? 'Kích hoạt thành công Key VIP Premium (Đã mở khóa Kho Tài Nguyên)!'
+        : 'Kích hoạt key bản quyền thành công!',
+      isPremium: grantPremium,
+      expiresAt: newStatus === 'LIFETIME' ? 'LIFETIME' : expiresAt
+    };
   }
 
   // User: Request key via email
-  async requestKey(userId: string, data: { name: string, phone: string, email: string }) {
+  async requestKey(userId: string, data: { name: string; phone: string; email: string; isPremium?: boolean }) {
     const adminEmail = process.env.SMTP_USER;
     if (!adminEmail) {
       throw new BadRequestException('Chưa cấu hình Email Admin');
     }
 
+    const packageType = data.isPremium
+      ? '👑 VIP PREMIUM (Bao gồm Kho Tài Nguyên Creative & Đầy đủ tính năng)'
+      : 'BẢN QUYỀN CHUẨN (Original Key)';
+
     const content = `
-      Khách hàng yêu cầu mua/cấp Key mới:
-      - Tên: ${data.name}
-      - SĐT: ${data.phone}
+      Khách hàng gửi yêu cầu cấp Key bản quyền:
+      - Họ và tên: ${data.name}
+      - Số điện thoại: ${data.phone}
       - Email: ${data.email}
+      - Gói yêu cầu: ${packageType}
+      - User ID: ${userId}
       
-      Vui lòng liên hệ với khách hàng để cấp key.
+      Vui lòng kiểm tra và cấp mã Key tương ứng cho khách hàng trên Admin Dashboard.
     `;
 
     await this.emailService.sendEmail(
       adminEmail,
-      'YÊU CẦU CẤP KEY - PHOTO PICKER PRO',
+      `[YÊU CẦU CẤP KEY ${data.isPremium ? 'PREMIUM' : 'CHUẨN'}] - PHOTO PICKER PRO`,
       content
     );
 

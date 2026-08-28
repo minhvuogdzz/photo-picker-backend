@@ -1,4 +1,5 @@
-import { IsNotEmpty, IsNumber, IsOptional, IsString } from 'class-validator';
+import { IsBoolean, IsEnum, IsNotEmpty, IsNumber, IsOptional, IsString } from 'class-validator';
+import { KeyType } from '@prisma/client';
 
 export class GenerateKeysDto {
   @IsNumber()
@@ -7,6 +8,10 @@ export class GenerateKeysDto {
   @IsOptional()
   @IsNumber()
   durationDays?: number;
+
+  @IsOptional()
+  @IsEnum(KeyType)
+  keyType?: KeyType; // ORIGINAL | PREMIUM
 }
 
 export class ActivateKeyDto {
@@ -27,4 +32,8 @@ export class RequestKeyDto {
   @IsString()
   @IsNotEmpty()
   email!: string;
+
+  @IsOptional()
+  @IsBoolean()
+  isPremium?: boolean;
 }

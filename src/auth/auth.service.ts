@@ -139,6 +139,7 @@ export class AuthService {
       subscription: {
         status: user.subscription?.status || 'INACTIVE',
         plan: user.subscription?.plan || 'STARTER',
+        isPremium: user.subscription?.isPremium ?? false,
         expiresAt: user.subscription?.expiresAt || null,
         daysRemaining,
       },
@@ -190,6 +191,7 @@ export class AuthService {
       subscription: {
         status: user.subscription?.status || 'INACTIVE',
         plan: user.subscription?.plan || 'STARTER',
+        isPremium: user.subscription?.isPremium ?? false,
         expiresAt: user.subscription?.expiresAt || null,
         daysRemaining,
       },

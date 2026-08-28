@@ -26,4 +26,8 @@ export class UpdateSubscriptionDto {
   @IsOptional()
   @IsNumber()
   addDays?: number;
+
+  @IsOptional()
+  isPremium?: boolean;
 }
+

@@ -12,6 +12,7 @@ import { LicenseModule } from './license/license.module';
 import { SyncModule } from './sync/sync.module';
 import { CloudinaryModule } from './cloudinary/cloudinary.module';
 import { ShowcaseModule } from './showcase/showcase.module';
+import { ResourceModule } from './resource/resource.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { ShowcaseModule } from './showcase/showcase.module';
     SyncModule,
     CloudinaryModule,
     ShowcaseModule,
+    ResourceModule,
     ScheduleModule.forRoot(),
   ],
   controllers: [AppController],

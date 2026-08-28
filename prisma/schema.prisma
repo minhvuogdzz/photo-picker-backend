@@ -28,6 +28,7 @@ model Subscription {
   user          User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   status        SubscriptionStatus @default(INACTIVE)
   plan          SubscriptionPlan   @default(STARTER)
+  isPremium     Boolean            @default(false)
   expiresAt     DateTime?
   createdAt     DateTime           @default(now())
   updatedAt     DateTime           @updatedAt
@@ -85,9 +86,15 @@ enum SubscriptionPlan {
   LIFETIME
 }
 
+enum KeyType {
+  ORIGINAL
+  PREMIUM
+}
+
 model LicenseKey {
   id           String    @id @default(auto()) @map("_id") @db.ObjectId
   key          String    @unique
+  keyType      KeyType   @default(ORIGINAL)
   durationDays Int       @default(90)
   status       KeyStatus @default(UNUSED)
   userId       String?   @db.ObjectId
@@ -95,6 +102,7 @@ model LicenseKey {
   activatedAt  DateTime?
   createdAt    DateTime  @default(now())
 }
+
 
 enum KeyStatus {
   UNUSED
@@ -112,3 +120,29 @@ model ShowcaseImage {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
+
+model Resource {
+  id           String    @id @default(auto()) @map("_id") @db.ObjectId
+  category     String
+  title        String
+  description  String
+  hashtags     String[]  @default([])
+  isVip        Boolean   @default(false)
+  isHot        Boolean   @default(false)
+  fileFormat   String    @default(".ZIP")
+  rating       Float     @default(5.0)
+  size         String    @default("0 MB")
+  downloadType String    @default("DIRECT") // "DIRECT" | "DRIVE"
+  downloadUrl  String?
+  fileData     String?   // Base64 file data for direct DB storage (<5MB)
+  fileName     String?
+  mimeType     String?
+  fileSize     Int?
+  author       String    @default("MVD Academy")
+  downloads    Int       @default(0)
+  isActive     Boolean   @default(true)
+  order        Int       @default(0)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
