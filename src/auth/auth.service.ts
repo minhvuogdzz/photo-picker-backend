@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException, ForbiddenException, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, ForbiddenException, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
@@ -72,9 +72,10 @@ export class AuthService {
 
       if (existingDevice && existingDevice.deviceFingerprint !== dto.deviceFingerprint) {
         // If user hasn't explicitly chosen to force login, throw conflict
-        if (!(dto as any).force) {
-          throw new BadRequestException({
+        if (!dto.force) {
+          throw new ConflictException({
             statusCode: 409,
+            errorCode: 'DEVICE_CONFLICT',
             message: 'Tài khoản này đang được đăng nhập ở thiết bị khác.',
             error: 'Conflict'
           });
