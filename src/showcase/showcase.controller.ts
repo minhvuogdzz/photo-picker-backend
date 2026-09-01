@@ -9,6 +9,7 @@ import {
   UseGuards,
   UseInterceptors,
   UploadedFiles,
+  Header,
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { ShowcaseService } from './showcase.service';
@@ -21,8 +22,10 @@ export class ShowcaseController {
 
   /**
    * Public endpoint for Client App (LoginPage) to fetch active slider photos
+   * Cache at Vercel Edge CDN for 5 minutes (s-maxage=300) to eliminate serverless compute
    */
   @Get('showcase')
+  @Header('Cache-Control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=600')
   async getActiveShowcase() {
     const data = await this.showcaseService.getActiveShowcase();
     return { success: true, data };
