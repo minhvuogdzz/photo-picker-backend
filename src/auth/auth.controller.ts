@@ -1,6 +1,6 @@
-import { Controller, Post, Body, UseGuards, Req, Get } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, Req, Get, Query } from '@nestjs/common';
 import { AuthService } from './auth.service';
-import { LoginDto, ResetPasswordDto, ForgotPasswordDto, VerifyCodeDto, RegisterDto, VerifyRegisterDto } from './dto/auth.dto';
+import { LoginDto, ResetPasswordDto, ForgotPasswordDto, VerifyCodeDto, RegisterDto, VerifyRegisterDto, UpdateProfileDto, ChangePasswordDto } from './dto/auth.dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
 
 @Controller('auth')
@@ -22,6 +22,37 @@ export class AuthController {
   @Post('verify-register')
   async verifyRegister(@Body() dto: VerifyRegisterDto) {
     const result = await this.authService.verifyRegister(dto);
+    return { success: true, data: result };
+  }
+
+  @Get('check-username')
+  async checkUsername(@Query('username') username: string) {
+    const result = await this.authService.checkUsername(username);
+    return { success: true, data: result };
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('profile')
+  async updateProfile(@Req() req: any, @Body() dto: UpdateProfileDto) {
+    const userId = req.user.userId;
+    const result = await this.authService.updateProfile(userId, dto);
+    return { success: true, data: result };
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('change-password')
+  async changePassword(@Req() req: any, @Body() dto: ChangePasswordDto) {
+    const userId = req.user.userId;
+    const result = await this.authService.changePassword(userId, dto);
+    return { success: true, data: result };
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('logout-others')
+  async logoutOthers(@Req() req: any) {
+    const userId = req.user.userId;
+    const deviceId = req.user.deviceId;
+    const result = await this.authService.logoutOtherDevices(userId, deviceId);
     return { success: true, data: result };
   }
 

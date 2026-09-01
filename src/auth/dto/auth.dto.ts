@@ -39,11 +39,19 @@ export class ResetPasswordDto {
 export class RegisterDto {
   @IsEmail()
   email: string;
+
+  @IsString()
+  @IsOptional()
+  username?: string;
 }
 
 export class VerifyRegisterDto {
   @IsEmail()
   email: string;
+
+  @IsString()
+  @IsOptional()
+  username?: string;
 
   @IsString()
   code: string;
@@ -67,4 +75,30 @@ export class VerifyCodeDto {
   @IsString()
   @IsNotEmpty()
   code!: string;
+}
+
+export class UpdateProfileDto {
+  @IsOptional()
+  @IsString()
+  username?: string;
+
+  @IsOptional()
+  @IsString()
+  name?: string;
+}
+
+export class ChangePasswordDto {
+  @IsString()
+  @IsNotEmpty()
+  currentPassword!: string;
+
+  @IsString()
+  @MinLength(6)
+  newPassword!: string;
+}
+
+export class CheckUsernameDto {
+  @IsString()
+  @IsNotEmpty()
+  username!: string;
 }

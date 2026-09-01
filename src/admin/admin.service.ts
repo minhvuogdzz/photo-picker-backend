@@ -138,15 +138,30 @@ export class AdminService {
 
   // 6. Create User Manually
   async createUser(data: any) {
-    const existing = await this.prisma.user.findUnique({ where: { email: data.email } });
+    const lowerEmail = data.email.trim().toLowerCase();
+    const existing = await this.prisma.user.findUnique({ where: { email: lowerEmail } });
     if (existing) {
       throw new BadRequestException('Email đã tồn tại');
+    }
+
+    let cleanUsername = (data.username || lowerEmail.split('@')[0]).trim().toLowerCase();
+    cleanUsername = cleanUsername.replace(/[^a-z0-9_.-]/g, '');
+    if (!cleanUsername || cleanUsername.length < 3) {
+      cleanUsername = `user_${Date.now().toString().slice(-4)}`;
+    }
+
+    let finalUsername = cleanUsername;
+    let suffix = 1;
+    while (await this.prisma.user.findUnique({ where: { username: finalUsername } })) {
+      finalUsername = `${cleanUsername}${suffix}`;
+      suffix++;
     }
 
     const hashedPassword = await bcrypt.hash(data.password, 10);
     const user = await this.prisma.user.create({
       data: {
-        email: data.email,
+        email: lowerEmail,
+        username: finalUsername,
         password: hashedPassword,
         name: data.name,
         role: 'USER',

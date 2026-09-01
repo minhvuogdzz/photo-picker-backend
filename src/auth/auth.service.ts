@@ -1,13 +1,14 @@
-import { Injectable, UnauthorizedException, ForbiddenException, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, ForbiddenException, NotFoundException, BadRequestException, ConflictException, OnApplicationBootstrap } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { EmailService } from '../email/email.service';
-import { LoginDto, ResetPasswordDto, ForgotPasswordDto, VerifyCodeDto, RegisterDto, VerifyRegisterDto } from './dto/auth.dto';
+import { LoginDto, ResetPasswordDto, ForgotPasswordDto, VerifyCodeDto, RegisterDto, VerifyRegisterDto, UpdateProfileDto, ChangePasswordDto } from './dto/auth.dto';
 import { SyncGateway } from '../sync/sync.gateway';
+import { migrateUsernames } from './username-migration';
 
 @Injectable()
-export class AuthService {
+export class AuthService implements OnApplicationBootstrap {
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
@@ -15,19 +16,36 @@ export class AuthService {
     private syncGateway: SyncGateway,
   ) {}
 
+  async onApplicationBootstrap() {
+    try {
+      await migrateUsernames(this.prisma);
+    } catch (err) {
+      console.error('[AuthService] Error during username auto-migration:', err);
+    }
+  }
+
   async login(dto: LoginDto) {
-    const user = await this.prisma.user.findUnique({
-      where: { email: dto.email },
+    const identifier = (dto.email || '').trim();
+    const lowerIdentifier = identifier.toLowerCase();
+    const user = await this.prisma.user.findFirst({
+      where: {
+        OR: [
+          { email: lowerIdentifier },
+          { username: lowerIdentifier },
+          { email: identifier },
+          { username: identifier },
+        ],
+      },
       include: { subscription: true },
     });
 
     if (!user) {
-      throw new UnauthorizedException('Sai email hoặc mật khẩu');
+      throw new UnauthorizedException('Sai tài khoản hoặc mật khẩu');
     }
 
     const passwordMatches = await bcrypt.compare(dto.password, user.password);
     if (!passwordMatches) {
-      throw new UnauthorizedException('Sai email hoặc mật khẩu');
+      throw new UnauthorizedException('Sai tài khoản hoặc mật khẩu');
     }
 
     if (!user.subscription) {
@@ -135,6 +153,7 @@ export class AuthService {
       refreshToken,
       userId: user.id,
       email: user.email,
+      username: user.username || user.email.split('@')[0],
       name: user.name,
       subscription: {
         status: user.subscription?.status || 'INACTIVE',
@@ -187,6 +206,7 @@ export class AuthService {
     return {
       userId: user.id,
       email: user.email,
+      username: user.username || user.email.split('@')[0],
       name: user.name,
       subscription: {
         status: user.subscription?.status || 'INACTIVE',
@@ -208,13 +228,25 @@ export class AuthService {
   }
 
   async register(dto: RegisterDto) {
-    const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
+    const lowerEmail = dto.email.trim().toLowerCase();
+    const existing = await this.prisma.user.findUnique({ where: { email: lowerEmail } });
     if (existing) {
       throw new BadRequestException('Email đã được sử dụng.');
     }
 
+    if (dto.username) {
+      const cleanUsername = dto.username.trim().toLowerCase();
+      if (!/^[a-z0-9_.-]{3,30}$/.test(cleanUsername)) {
+        throw new BadRequestException('Tên tài khoản không hợp lệ (từ 3-30 ký tự, gồm chữ cái, số, gạch dưới, gạch ngang, dấu chấm).');
+      }
+      const existingUser = await this.prisma.user.findUnique({ where: { username: cleanUsername } });
+      if (existingUser) {
+        throw new BadRequestException('Tên tài khoản này đã được sử dụng. Vui lòng chọn tên khác.');
+      }
+    }
+
     await this.prisma.verificationCode.deleteMany({
-      where: { email: dto.email, type: 'EMAIL_VERIFICATION' }
+      where: { email: lowerEmail, type: 'EMAIL_VERIFICATION' }
     });
 
     const code = this.generateOTP();
@@ -222,30 +254,45 @@ export class AuthService {
 
     await this.prisma.verificationCode.create({
       data: {
-        email: dto.email,
+        email: lowerEmail,
         code,
         expiresAt,
         type: 'EMAIL_VERIFICATION'
       }
     });
 
-    await this.emailService.sendVerificationCode(dto.email, code);
+    await this.emailService.sendVerificationCode(lowerEmail, code);
     return { message: 'Mã xác nhận đã được gửi.' };
   }
 
   async verifyRegister(dto: VerifyRegisterDto) {
+    const lowerEmail = dto.email.trim().toLowerCase();
     const verification = await this.prisma.verificationCode.findFirst({
-      where: { email: dto.email, code: dto.code, type: 'EMAIL_VERIFICATION' }
+      where: { email: lowerEmail, code: dto.code, type: 'EMAIL_VERIFICATION' }
     });
 
     if (!verification || verification.expiresAt < new Date() || verification.attempts >= 5) {
       throw new BadRequestException('Mã xác nhận không hợp lệ hoặc đã hết hạn');
     }
 
+    let cleanUsername = (dto.username || lowerEmail.split('@')[0]).trim().toLowerCase();
+    cleanUsername = cleanUsername.replace(/[^a-z0-9_.-]/g, '');
+    if (!cleanUsername || cleanUsername.length < 3) {
+      cleanUsername = `user_${Date.now().toString().slice(-4)}`;
+    }
+
+    let finalUsername = cleanUsername;
+    let suffix = 1;
+    while (await this.prisma.user.findUnique({ where: { username: finalUsername } })) {
+      finalUsername = `${cleanUsername}${suffix}`;
+      suffix++;
+    }
+
     const hashedPassword = await bcrypt.hash(dto.password, 10);
     const user = await this.prisma.user.create({
       data: {
-        email: dto.email,
+        email: lowerEmail,
+        username: finalUsername,
         password: hashedPassword,
         name: dto.name,
         role: 'USER',
@@ -266,7 +313,7 @@ export class AuthService {
     await this.prisma.verificationCode.delete({ where: { id: verification.id } });
 
     return this.login({
-      email: dto.email,
+      email: lowerEmail,
       password: dto.password,
       deviceFingerprint: dto.deviceFingerprint
     });
@@ -362,5 +409,101 @@ export class AuthService {
     this.syncGateway.emitToUser(user.id, 'forceLogout', { deviceId: 'all' });
 
     return { success: true };
+  }
+
+  async checkUsername(rawUsername: string) {
+    const username = (rawUsername || '').trim().toLowerCase();
+    if (!/^[a-z0-9_.-]{3,30}$/.test(username)) {
+      return {
+        available: false,
+        message: 'Tên tài khoản từ 3-30 ký tự, không dấu, chỉ gồm chữ cái, số, gạch dưới, gạch ngang và dấu chấm.',
+      };
+    }
+    const existing = await this.prisma.user.findUnique({ where: { username } });
+    if (existing) {
+      return { available: false, message: 'Tên tài khoản này đã được sử dụng.' };
+    }
+    return { available: true, message: 'Tên tài khoản hợp lệ và có thể sử dụng.' };
+  }
+
+  async updateProfile(userId: string, dto: UpdateProfileDto) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new NotFoundException('Người dùng không tồn tại');
+
+    const updateData: any = {};
+
+    if (dto.name !== undefined && dto.name.trim() !== '') {
+      updateData.name = dto.name.trim();
+    }
+
+    if (dto.username !== undefined && dto.username.trim() !== '') {
+      const cleanUsername = dto.username.trim().toLowerCase();
+      if (!/^[a-z0-9_.-]{3,30}$/.test(cleanUsername)) {
+        throw new BadRequestException('Tên tài khoản từ 3-30 ký tự, không dấu, chỉ gồm chữ cái, số, gạch dưới, gạch ngang và dấu chấm.');
+      }
+
+      if (cleanUsername !== user.username) {
+        const existing = await this.prisma.user.findUnique({ where: { username: cleanUsername } });
+        if (existing && existing.id !== userId) {
+          throw new BadRequestException('Tên tài khoản này đã có người sử dụng. Vui lòng chọn tên khác.');
+        }
+        updateData.username = cleanUsername;
+      }
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      return {
+        userId: user.id,
+        email: user.email,
+        username: user.username || user.email.split('@')[0],
+        name: user.name,
+      };
+    }
+
+    const updatedUser = await this.prisma.user.update({
+      where: { id: userId },
+      data: updateData,
+    });
+
+    return {
+      userId: updatedUser.id,
+      email: updatedUser.email,
+      username: updatedUser.username,
+      name: updatedUser.name,
+    };
+  }
+
+  async changePassword(userId: string, dto: ChangePasswordDto) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new NotFoundException('Người dùng không tồn tại');
+
+    const isMatch = await bcrypt.compare(dto.currentPassword, user.password);
+    if (!isMatch) {
+      throw new BadRequestException('Mật khẩu hiện tại không chính xác.');
+    }
+
+    if (dto.newPassword.length < 6) {
+      throw new BadRequestException('Mật khẩu mới phải có ít nhất 6 ký tự.');
+    }
+
+    const hashedPassword = await bcrypt.hash(dto.newPassword, 10);
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { password: hashedPassword },
+    });
+
+    return { success: true, message: 'Đổi mật khẩu thành công.' };
+  }
+
+  async logoutOtherDevices(userId: string, currentDeviceId: string) {
+    await this.prisma.device.deleteMany({
+      where: {
+        userId,
+        deviceFingerprint: { not: currentDeviceId },
+      },
+    });
+
+    this.syncGateway.emitToUser(userId, 'forceLogout', { deviceId: 'others' });
+    return { success: true, message: 'Đã đăng xuất khỏi tất cả các thiết bị khác.' };
   }
 }
