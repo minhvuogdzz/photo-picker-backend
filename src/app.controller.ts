@@ -1,17 +1,74 @@
-import { Controller, Get, Post, Body } from '@nestjs/common';
+import { Controller, Get, Post, Body, Header, Query, Res } from '@nestjs/common';
 import { AppService } from './app.service';
 import { EmailService } from './email/email.service';
+import { PrismaService } from './prisma/prisma.service';
 
 @Controller()
 export class AppController {
   constructor(
     private readonly appService: AppService,
-    private readonly emailService: EmailService
+    private readonly emailService: EmailService,
+    private readonly prisma: PrismaService,
   ) {}
 
   @Get()
   getHello(): string {
     return this.appService.getHello();
+  }
+
+  /**
+   * Health Check Endpoint
+   * 
+   * Behavior reality on Vercel Serverless:
+   * - Warm container (Liveness): GET /health -> Instant response (~5-15ms), 0 database queries,
+   *   0 network hops, minimal CPU.
+   * - Cold start: Serverless function still bootstraps NestJS AppModule and PrismaClient.
+   * - Readiness: GET /health?readiness=true -> Verifies database ping with a 2-second timeout.
+   *   Returns HTTP 503 if database is disconnected/unreachable.
+   */
+  @Get('health')
+  @Header('Cache-Control', 'no-cache, no-store, must-revalidate')
+  async getHealth(
+    @Query('readiness') readiness?: string,
+    @Res({ passthrough: true }) res?: any,
+  ) {
+    const isReadiness = readiness === 'true';
+    const timestamp = new Date().toISOString();
+    const version = process.env.npm_package_version || '2.0.3';
+
+    if (isReadiness) {
+      try {
+        await Promise.race([
+          this.prisma.$runCommandRaw({ ping: 1 }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('DB_TIMEOUT')), 2000)),
+        ]);
+        return {
+          status: 'ok',
+          service: 'photo-picker-backend',
+          timestamp,
+          version,
+          database: 'connected',
+        };
+      } catch {
+        if (res?.status) {
+          res.status(503);
+        }
+        return {
+          status: 'degraded',
+          service: 'photo-picker-backend',
+          timestamp,
+          version,
+          database: 'disconnected',
+        };
+      }
+    }
+
+    return {
+      status: 'ok',
+      service: 'photo-picker-backend',
+      timestamp,
+      version,
+    };
   }
 
   @Post('feedback')

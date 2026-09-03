@@ -22,12 +22,11 @@ export class ShowcaseController {
 
   /**
    * Public endpoint for Client App (LoginPage) to fetch active slider photos
-   * Disables CDN and browser caching so slider updates immediately when admin changes photos
+   * Uses Edge CDN caching with stale-while-revalidate so images load instantly from edge cache
+   * while keeping origin load minimal.
    */
   @Get('showcase')
-  @Header('Cache-Control', 'no-cache, no-store, must-revalidate')
-  @Header('Pragma', 'no-cache')
-  @Header('Expires', '0')
+  @Header('Cache-Control', 'public, max-age=15, s-maxage=60, stale-while-revalidate=120')
   async getActiveShowcase() {
     const data = await this.showcaseService.getActiveShowcase();
     return { success: true, data };

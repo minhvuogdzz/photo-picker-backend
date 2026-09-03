@@ -1,5 +1,4 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { SyncGateway } from '../sync/sync.gateway';
 
@@ -12,8 +11,18 @@ export class SubscriptionCron {
     private readonly syncGateway: SyncGateway,
   ) {}
 
-  @Cron(CronExpression.EVERY_10_SECONDS)
+  // In Vercel serverless environment, in-process 10-second timers keep functions warm
+  // and drain CPU/memory quota without reaching clients (since WebSockets do not persist on serverless).
+  // Subscription expiry is enforced on-demand during validateSubscription (lazy evaluation)
+  // and via the /admin/scan-expired endpoint.
   async handleCron() {
+    if (process.env.ENABLE_INTERNAL_CRON !== 'true') {
+      return;
+    }
+    await this.lockExpiredSubscriptions();
+  }
+
+  async lockExpiredSubscriptions() {
     // Find all subscriptions that are ACTIVE or TRIAL but have expired
     const expiredSubscriptions = await this.prisma.subscription.findMany({
       where: {
@@ -31,7 +40,7 @@ export class SubscriptionCron {
           data: { status: 'EXPIRED' },
         });
 
-        // Emit websocket event to kick them out instantly
+        // Emit websocket event if supported
         this.syncGateway.emitToUser(sub.userId, 'subscriptionExpired', {});
       }
     }

@@ -17,10 +17,14 @@ export class AuthService implements OnApplicationBootstrap {
   ) {}
 
   async onApplicationBootstrap() {
-    try {
-      await migrateUsernames(this.prisma);
-    } catch (err) {
-      console.error('[AuthService] Error during username auto-migration:', err);
+    // Only run username migration when explicitly enabled via env flag,
+    // avoiding cold start penalties and unnecessary database scans on serverless functions.
+    if (process.env.RUN_USERNAME_MIGRATION === 'true') {
+      try {
+        await migrateUsernames(this.prisma);
+      } catch (err) {
+        console.error('[AuthService] Error during username auto-migration:', err);
+      }
     }
   }
 

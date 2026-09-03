@@ -1,8 +1,30 @@
 import { PrismaClient } from '@prisma/client';
 
 export async function migrateUsernames(prisma: PrismaClient): Promise<{ updatedCount: number }> {
-  const allUsers = await prisma.user.findMany();
-  const users = allUsers.filter((u) => !u.username || u.username.trim() === '');
+  // Fast check: do not scan the table if no user has missing username
+  const needsMigration = await prisma.user.findFirst({
+    where: {
+      OR: [
+        { username: null },
+        { username: '' },
+      ],
+    },
+    select: { id: true },
+  });
+
+  if (!needsMigration) {
+    return { updatedCount: 0 };
+  }
+
+  // Only query users that actually need migration instead of entire table
+  const users = await prisma.user.findMany({
+    where: {
+      OR: [
+        { username: null },
+        { username: '' },
+      ],
+    },
+  });
 
   if (users.length === 0) {
     return { updatedCount: 0 };

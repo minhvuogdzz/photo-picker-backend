@@ -8,7 +8,11 @@
   },
   "rewrites": [
     {
-      "source": "/(.*)",
+      "source": "/",
+      "destination": "/api"
+    },
+    {
+      "source": "/(api|auth|subscription|license|admin|showcase|resources|feedback|health)(.*)",
       "destination": "/api"
     }
   ]
