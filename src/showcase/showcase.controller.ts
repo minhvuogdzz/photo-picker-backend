@@ -22,10 +22,12 @@ export class ShowcaseController {
 
   /**
    * Public endpoint for Client App (LoginPage) to fetch active slider photos
-   * Cache at Vercel Edge CDN for 5 minutes (s-maxage=300) to eliminate serverless compute
+   * Disables CDN and browser caching so slider updates immediately when admin changes photos
    */
   @Get('showcase')
-  @Header('Cache-Control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=600')
+  @Header('Cache-Control', 'no-cache, no-store, must-revalidate')
+  @Header('Pragma', 'no-cache')
+  @Header('Expires', '0')
   async getActiveShowcase() {
     const data = await this.showcaseService.getActiveShowcase();
     return { success: true, data };
@@ -36,6 +38,9 @@ export class ShowcaseController {
    */
   @UseGuards(JwtAuthGuard)
   @Get('admin/showcase')
+  @Header('Cache-Control', 'no-cache, no-store, must-revalidate')
+  @Header('Pragma', 'no-cache')
+  @Header('Expires', '0')
   async getAllShowcase() {
     const data = await this.showcaseService.getAllShowcase();
     return { success: true, data };
