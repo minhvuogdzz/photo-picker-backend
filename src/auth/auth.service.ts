@@ -130,7 +130,7 @@ export class AuthService implements OnApplicationBootstrap {
     // Generate Tokens
     const payload = { sub: user.id, email: user.email, deviceId: dto.deviceFingerprint };
     const accessToken = this.jwtService.sign(payload);
-    const refreshToken = this.jwtService.sign(payload, { expiresIn: '7d' });
+    const refreshToken = this.jwtService.sign(payload, { expiresIn: '90d' });
 
     let daysRemaining: number | null = null;
     if (user.subscription?.expiresAt) {
@@ -218,6 +218,76 @@ export class AuthService implements OnApplicationBootstrap {
       deviceId,
       lastSyncAt: new Date().toISOString(),
     };
+  }
+
+  async refreshToken(token: string) {
+    if (!token) {
+      throw new UnauthorizedException('Refresh token is required');
+    }
+
+    try {
+      const payload = await this.jwtService.verifyAsync(token, {
+        secret: process.env.JWT_SECRET || 'super-secret-jwt-key-replace-in-production',
+      });
+
+      const userId = payload.sub || payload.userId;
+      const deviceId = payload.deviceId;
+
+      const user = await this.prisma.user.findUnique({
+        where: { id: userId },
+        include: { subscription: true },
+      });
+
+      if (!user) {
+        throw new UnauthorizedException('User not found');
+      }
+
+      // Check device
+      if (deviceId) {
+        const device = await this.prisma.device.findFirst({
+          where: { userId, deviceFingerprint: deviceId },
+        });
+        if (!device) {
+          throw new UnauthorizedException('SESSION_EXPIRED');
+        }
+        await this.prisma.device.update({
+          where: { id: device.id },
+          data: { lastActiveAt: new Date() },
+        });
+      }
+
+      const newPayload = { sub: user.id, email: user.email, deviceId };
+      const newAccessToken = this.jwtService.sign(newPayload);
+      const newRefreshToken = this.jwtService.sign(newPayload, { expiresIn: '90d' });
+
+      let daysRemaining: number | null = null;
+      if (user.subscription?.expiresAt) {
+        const now = new Date();
+        const expiresAt = new Date(user.subscription.expiresAt);
+        const diffTime = expiresAt.getTime() - now.getTime();
+        daysRemaining = Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+      }
+
+      return {
+        accessToken: newAccessToken,
+        refreshToken: newRefreshToken,
+        userId: user.id,
+        email: user.email,
+        username: user.username || user.email.split('@')[0],
+        name: user.name,
+        subscription: {
+          status: user.subscription?.status || 'INACTIVE',
+          plan: user.subscription?.plan || 'STARTER',
+          isPremium: user.subscription?.isPremium ?? false,
+          expiresAt: user.subscription?.expiresAt || null,
+          daysRemaining,
+        },
+        deviceId,
+        lastSyncAt: new Date().toISOString(),
+      };
+    } catch {
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
   }
 
   async logout(userId: string, deviceId: string) {

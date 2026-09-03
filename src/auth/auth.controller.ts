@@ -13,6 +13,12 @@ export class AuthController {
     return { success: true, data: result };
   }
 
+  @Post('refresh')
+  async refresh(@Body('refreshToken') refreshToken: string) {
+    const result = await this.authService.refreshToken(refreshToken);
+    return { success: true, data: result };
+  }
+
   @Post('register')
   async register(@Body() dto: RegisterDto) {
     const result = await this.authService.register(dto);

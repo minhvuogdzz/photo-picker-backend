@@ -6,7 +6,7 @@ import { SyncGateway } from './sync.gateway';
   imports: [
     JwtModule.register({
       secret: process.env.JWT_SECRET || 'super-secret-jwt-key-replace-in-production',
-      signOptions: { expiresIn: '1d' },
+      signOptions: { expiresIn: '30d' },
     }),
   ],
   providers: [SyncGateway],
