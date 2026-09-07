@@ -8,10 +8,11 @@ import {
   Body,
   UseGuards,
   UseInterceptors,
+  UploadedFile,
   UploadedFiles,
   Header,
 } from '@nestjs/common';
-import { FilesInterceptor } from '@nestjs/platform-express';
+import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { ShowcaseService } from './showcase.service';
 import { UpdateShowcaseDto, UpdateShowcaseAlbumDto } from './dto/showcase.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -51,7 +52,27 @@ export class ShowcaseController {
   }
 
   /**
-   * Admin: Create a new Showcase Album with up to 20 compressed images.
+   * Admin: Upload a single image to Cloudinary (Bypasses Vercel Serverless Function body size limits)
+   */
+  @UseGuards(JwtAuthGuard)
+  @Post('admin/showcase/upload-single')
+  @UseInterceptors(
+    FileInterceptor('image', {
+      limits: { fileSize: 2 * 1024 * 1024 },
+    }),
+  )
+  async uploadSinglePhoto(@UploadedFile() file: Express.Multer.File) {
+    const data = await this.showcaseService.uploadSingleShowcaseImage(file);
+    return {
+      success: true,
+      data,
+      message: 'Tải ảnh lên Cloudinary thành công!',
+    };
+  }
+
+  /**
+   * Admin: Create a new Showcase Album. Supports both JSON body with pre-uploaded Cloudinary images,
+   * or direct multipart files upload (fallback).
    */
   @UseGuards(JwtAuthGuard)
   @Post('admin/showcase/albums')
@@ -62,19 +83,38 @@ export class ShowcaseController {
   )
   async createAlbum(
     @UploadedFiles() files: Express.Multer.File[],
-    @Body('title') title: string,
-    @Body('order') order?: number,
-    @Body('isActive') isActive?: string | boolean,
-    @Body('description') description?: string,
+    @Body() body: any,
   ) {
+    // If client sent JSON with pre-uploaded images
+    if (body.images && Array.isArray(body.images) && body.images.length > 0) {
+      const data = await this.showcaseService.createAlbumFromData({
+        title: body.title,
+        description: body.description,
+        order: body.order ? Number(body.order) : 0,
+        isActive:
+          typeof body.isActive === 'string'
+            ? body.isActive !== 'false'
+            : body.isActive !== false,
+        images: body.images,
+      });
+      return {
+        success: true,
+        data,
+        message: `Đã tạo bộ ảnh "${data.title}" với ${data.images.length} ảnh thành công!`,
+      };
+    }
+
+    // Fallback: If client sent multipart files
     const activeBool =
-      typeof isActive === 'string' ? isActive !== 'false' : isActive !== false;
+      typeof body.isActive === 'string'
+        ? body.isActive !== 'false'
+        : body.isActive !== false;
     const data = await this.showcaseService.createAlbum(
-      title,
+      body.title,
       files,
-      order ? Number(order) : 0,
+      body.order ? Number(body.order) : 0,
       activeBool,
-      description,
+      body.description,
     );
     return {
       success: true,

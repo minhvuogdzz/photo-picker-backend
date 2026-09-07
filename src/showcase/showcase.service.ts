@@ -134,7 +134,90 @@ export class ShowcaseService {
   }
 
   /**
-   * Admin: Create a new ShowcaseAlbum with up to 20 compressed images.
+   * Admin: Upload a single compressed photo directly to Cloudinary
+   * Avoids Vercel 4.5MB payload limit by streaming 1 photo per request.
+   */
+  async uploadSingleShowcaseImage(file: Express.Multer.File) {
+    if (!file) {
+      throw new BadRequestException('Vui lòng chọn 1 file ảnh hợp lệ.');
+    }
+
+    if (file.size >= MAX_FILE_SIZE) {
+      const sizeMb = (file.size / (1024 * 1024)).toFixed(2);
+      throw new BadRequestException(
+        `File "${file.originalname}" dung lượng ${sizeMb}MB chưa được nén xuống dưới 1,5 MB.`,
+      );
+    }
+
+    if (!file.mimetype.startsWith('image/')) {
+      throw new BadRequestException(
+        `File "${file.originalname}" không phải là định dạng hình ảnh hợp lệ.`,
+      );
+    }
+
+    const { url, publicId } = await this.cloudinaryService.uploadImageBuffer(
+      file.buffer,
+    );
+
+    return {
+      url,
+      publicId,
+      originalname: file.originalname,
+    };
+  }
+
+  /**
+   * Admin: Create Showcase Album with pre-uploaded Cloudinary images (Fast & zero timeout/payload issues).
+   */
+  async createAlbumFromData(dto: {
+    title: string;
+    description?: string;
+    order?: number;
+    isActive?: boolean;
+    images: Array<{
+      url: string;
+      publicId?: string;
+      title?: string;
+      order?: number;
+    }>;
+  }) {
+    const { title, description, order = 0, isActive = true, images } = dto;
+
+    if (!title || !title.trim()) {
+      throw new BadRequestException('Vui lòng nhập tên bộ ảnh.');
+    }
+
+    if (!images || images.length === 0) {
+      throw new BadRequestException('Vui lòng chọn ít nhất 1 ảnh cho bộ ảnh.');
+    }
+
+    if (images.length > MAX_IMAGES_PER_ALBUM) {
+      throw new BadRequestException(
+        `Một bộ ảnh chỉ được tối đa ${MAX_IMAGES_PER_ALBUM} ảnh (bạn đã gửi ${images.length} ảnh).`,
+      );
+    }
+
+    const formattedPhotos = images.map((photo, idx) => ({
+      id: photo.publicId || `photo-${Date.now()}-${idx}`,
+      url: photo.url,
+      publicId: photo.publicId || null,
+      title: photo.title?.trim() || `${title.trim()} #${idx + 1}`,
+      order: photo.order !== undefined ? Number(photo.order) : idx,
+    }));
+
+    return this.prisma.showcaseAlbum.create({
+      data: {
+        title: title.trim(),
+        description: description?.trim() || null,
+        order: Number(order) || 0,
+        isActive: isActive !== false,
+        images: formattedPhotos,
+      },
+    });
+  }
+
+  /**
+   * Admin: Create a new ShowcaseAlbum with up to 20 compressed images (Legacy Multipart fallback).
    */
   async createAlbum(
     title: string,
@@ -192,7 +275,7 @@ export class ShowcaseService {
 
     const uploadedPhotos = uploadResults
       .filter((result) => result.status === 'fulfilled')
-      .map((result) => result.value);
+      .map((result) => (result as PromiseFulfilledResult<any>).value);
     const uploadFailure = uploadResults.find(
       (result) => result.status === 'rejected',
     );

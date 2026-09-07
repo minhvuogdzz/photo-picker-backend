@@ -16,6 +16,24 @@ export class UpdateShowcaseDto {
   @IsBoolean()
   isActive?: boolean;
 }
+export class ShowcasePhotoDto {
+  @IsString()
+  url: string;
+
+  @IsOptional()
+  @IsString()
+  publicId?: string;
+
+  @IsOptional()
+  @IsString()
+  title?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  order?: number;
+}
+
 export class CreateShowcaseAlbumDto {
   @IsString()
   title: string;
@@ -33,6 +51,9 @@ export class CreateShowcaseAlbumDto {
   @Type(() => Boolean)
   @IsBoolean()
   isActive?: boolean;
+
+  @IsOptional()
+  images?: ShowcasePhotoDto[];
 }
 
 export class UpdateShowcaseAlbumDto {
