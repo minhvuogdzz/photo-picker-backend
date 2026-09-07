@@ -80,11 +80,20 @@ export class AdminService {
       });
     }
 
-    // Realtime events
-    if (updateData.status === 'EXPIRED') {
-      this.syncGateway.emitToUser(userId, 'subscriptionExpired', {});
-    } else if (updateData.status === 'SUSPENDED') {
-      this.syncGateway.emitToUser(userId, 'accountSuspended', {});
+    const invalidStatuses: SubscriptionStatus[] = [
+      'EXPIRED',
+      'INACTIVE',
+      'SUSPENDED',
+      'CANCELLED',
+    ];
+
+    if (invalidStatuses.includes(resultSub.status)) {
+      await this.prisma.device.deleteMany({ where: { userId } });
+      if (resultSub.status === 'SUSPENDED') {
+        this.syncGateway.emitToUser(userId, 'accountSuspended', {});
+      } else {
+        this.syncGateway.emitToUser(userId, 'subscriptionExpired', {});
+      }
     } else {
       this.syncGateway.emitToUser(userId, 'subscriptionUpdated', {
         status: resultSub.status,
