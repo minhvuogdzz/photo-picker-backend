@@ -171,19 +171,49 @@ export class AuthService implements OnApplicationBootstrap {
     };
   }
 
+  // In-memory cache for validateSubscription to relieve MongoDB Atlas from rapid duplicate queries
+  private readonly validationCache = new Map<string, { data: any; cachedAt: number }>();
+  private readonly CACHE_TTL_MS = 60 * 1000; // 60 seconds
+
+  public invalidateSubscriptionCache(userId?: string) {
+    if (!userId) {
+      this.validationCache.clear();
+      return;
+    }
+    for (const key of this.validationCache.keys()) {
+      if (key.startsWith(`${userId}:`)) {
+        this.validationCache.delete(key);
+      }
+    }
+  }
+
   async validateSubscription(userId: string, deviceId: string) {
+    const cacheKey = `${userId}:${deviceId}`;
+    const cached = this.validationCache.get(cacheKey);
+    const nowMs = Date.now();
+    if (cached && nowMs - cached.cachedAt < this.CACHE_TTL_MS) {
+      return {
+        ...cached.data,
+        lastSyncAt: new Date().toISOString(),
+      };
+    }
+
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       include: { subscription: true },
     });
 
-    if (!user) throw new NotFoundException('User not found');
+    if (!user) {
+      this.validationCache.delete(cacheKey);
+      throw new NotFoundException('User not found');
+    }
 
     const device = await this.prisma.device.findFirst({
       where: { userId, deviceFingerprint: deviceId },
     });
 
     if (!device) {
+      this.validationCache.delete(cacheKey);
       throw new UnauthorizedException('SESSION_EXPIRED');
     }
 
@@ -204,10 +234,11 @@ export class AuthService implements OnApplicationBootstrap {
     }
 
     if (user.subscription?.status === 'SUSPENDED' || user.subscription?.status === 'CANCELLED') {
+      this.validationCache.delete(cacheKey);
       throw new ForbiddenException('SUBSCRIPTION_INVALID');
     }
 
-    return {
+    const result = {
       userId: user.id,
       email: user.email,
       username: user.username || user.email.split('@')[0],
@@ -222,6 +253,9 @@ export class AuthService implements OnApplicationBootstrap {
       deviceId,
       lastSyncAt: new Date().toISOString(),
     };
+
+    this.validationCache.set(cacheKey, { data: result, cachedAt: nowMs });
+    return result;
   }
 
   async refreshToken(token: string) {
@@ -295,6 +329,7 @@ export class AuthService implements OnApplicationBootstrap {
   }
 
   async logout(userId: string, deviceId: string) {
+    this.invalidateSubscriptionCache(userId);
     await this.prisma.device.deleteMany({
       where: { userId, deviceFingerprint: deviceId },
     });
@@ -570,6 +605,7 @@ export class AuthService implements OnApplicationBootstrap {
   }
 
   async logoutOtherDevices(userId: string, currentDeviceId: string) {
+    this.invalidateSubscriptionCache(userId);
     await this.prisma.device.deleteMany({
       where: {
         userId,

@@ -3,12 +3,14 @@ import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../email/email.service';
 import { KeyType } from '@prisma/client';
 import * as crypto from 'crypto';
+import { AuthService } from '../auth/auth.service';
 
 @Injectable()
 export class LicenseService {
   constructor(
     private prisma: PrismaService,
-    private emailService: EmailService
+    private emailService: EmailService,
+    private authService: AuthService,
   ) {}
 
   // Generate a random MVD-XXXX-XXXX-XXXX key
@@ -116,6 +118,8 @@ export class LicenseService {
         }
       });
     }
+
+    this.authService.invalidateSubscriptionCache(userId);
 
     return {
       success: true,

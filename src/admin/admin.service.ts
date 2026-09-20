@@ -3,12 +3,14 @@ import { PrismaService } from '../prisma/prisma.service';
 import { SubscriptionStatus, SubscriptionPlan, Role } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { SyncGateway } from '../sync/sync.gateway';
+import { AuthService } from '../auth/auth.service';
 
 @Injectable()
 export class AdminService {
   constructor(
     private prisma: PrismaService,
     private syncGateway: SyncGateway,
+    private authService: AuthService,
   ) {}
 
   // 1. Get Dashboard Stats
@@ -103,12 +105,14 @@ export class AdminService {
       });
     }
 
+    this.authService.invalidateSubscriptionCache(userId);
     return resultSub;
   }
 
 
   // 4. Suspend User
   async suspendUser(userId: string) {
+    this.authService.invalidateSubscriptionCache(userId);
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       include: { subscription: true }
@@ -137,6 +141,7 @@ export class AdminService {
       where: { id: deviceId }
     });
     if (device) {
+      this.authService.invalidateSubscriptionCache(device.userId);
       this.syncGateway.emitToUser(device.userId, 'forceLogout', { deviceId: device.deviceFingerprint });
       await this.prisma.device.delete({
         where: { id: deviceId }
