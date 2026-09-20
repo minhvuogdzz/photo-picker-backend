@@ -241,4 +241,34 @@ export class AdminService {
 
     return { success: true, count };
   }
+
+  // 9. Get System Configurations
+  async getSystemConfigs() {
+    const configs = await this.prisma.systemConfig.findMany();
+    const configMap: Record<string, string> = {
+      session_duration_minutes: '10',
+    };
+    for (const c of configs) {
+      configMap[c.key] = c.value;
+    }
+    return configMap;
+  }
+
+  // 10. Update System Configuration
+  async updateSystemConfig(key: string, value: string, description?: string) {
+    const stringValue = String(value);
+    const updated = await this.prisma.systemConfig.upsert({
+      where: { key },
+      create: { key, value: stringValue, description },
+      update: { value: stringValue, ...(description ? { description } : {}) },
+    });
+
+    if (key === 'session_duration_minutes') {
+      const minutes = parseInt(stringValue, 10) || 10;
+      this.authService.setSessionDurationCache(minutes);
+      this.syncGateway.server?.emit('sessionConfigUpdated', { sessionDurationMinutes: minutes });
+    }
+
+    return updated;
+  }
 }

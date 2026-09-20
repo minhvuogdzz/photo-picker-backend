@@ -2,6 +2,7 @@ import { Controller, Get, Post, Body, Header, Query, Res } from '@nestjs/common'
 import { AppService } from './app.service';
 import { EmailService } from './email/email.service';
 import { PrismaService } from './prisma/prisma.service';
+import { AuthService } from './auth/auth.service';
 
 @Controller()
 export class AppController {
@@ -9,11 +10,21 @@ export class AppController {
     private readonly appService: AppService,
     private readonly emailService: EmailService,
     private readonly prisma: PrismaService,
+    private readonly authService: AuthService,
   ) {}
 
   @Get()
   getHello(): string {
     return this.appService.getHello();
+  }
+
+  @Get('config/public')
+  @Header('Cache-Control', 'public, max-age=60')
+  async getPublicConfig() {
+    const sessionDurationMinutes = await this.authService.getSessionDurationMinutes();
+    return {
+      sessionDurationMinutes,
+    };
   }
 
   /**

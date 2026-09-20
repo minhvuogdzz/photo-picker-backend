@@ -168,7 +168,32 @@ export class AuthService implements OnApplicationBootstrap {
       },
       deviceId: dto.deviceFingerprint,
       lastSyncAt: new Date().toISOString(),
+      sessionDurationMinutes: await this.getSessionDurationMinutes(),
     };
+  }
+
+  private sessionDurationCache: { value: number; cachedAt: number } | null = null;
+
+  public async getSessionDurationMinutes(): Promise<number> {
+    const now = Date.now();
+    if (this.sessionDurationCache && now - this.sessionDurationCache.cachedAt < 60_000) {
+      return this.sessionDurationCache.value;
+    }
+    try {
+      const config = await this.prisma.systemConfig.findUnique({
+        where: { key: 'session_duration_minutes' },
+      });
+      const parsed = config ? parseInt(config.value, 10) : 10;
+      const valid = !isNaN(parsed) && parsed > 0 ? parsed : 10;
+      this.sessionDurationCache = { value: valid, cachedAt: now };
+      return valid;
+    } catch {
+      return 10;
+    }
+  }
+
+  public setSessionDurationCache(value: number) {
+    this.sessionDurationCache = { value, cachedAt: Date.now() };
   }
 
   // In-memory cache for validateSubscription to relieve MongoDB Atlas from rapid duplicate queries
@@ -252,6 +277,7 @@ export class AuthService implements OnApplicationBootstrap {
       },
       deviceId,
       lastSyncAt: new Date().toISOString(),
+      sessionDurationMinutes: await this.getSessionDurationMinutes(),
     };
 
     this.validationCache.set(cacheKey, { data: result, cachedAt: nowMs });

@@ -54,4 +54,14 @@ export class AdminController {
   notifyExpiring() {
     return this.adminService.notifyExpiring();
   }
+
+  @Get('config')
+  getSystemConfigs() {
+    return this.adminService.getSystemConfigs();
+  }
+
+  @Post('config')
+  updateSystemConfig(@Body() body: { key: string; value: string; description?: string }) {
+    return this.adminService.updateSystemConfig(body.key, body.value, body.description);
+  }
 }
