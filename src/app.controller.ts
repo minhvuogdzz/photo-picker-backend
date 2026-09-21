@@ -22,8 +22,42 @@ export class AppController {
   @Header('Cache-Control', 'public, max-age=60')
   async getPublicConfig() {
     const sessionDurationMinutes = await this.authService.getSessionDurationMinutes();
+
+    // Fetch public configurations from SystemConfig (admin-configurable)
+    let companyWebsiteUrl = '';
+    const launcherBanner = {
+      badge: '',
+      title: '',
+      subtitle: '',
+    };
+
+    try {
+      const configs = await this.prisma.systemConfig.findMany({
+        where: {
+          key: {
+            in: [
+              'company_website_url',
+              'launcher_banner_badge',
+              'launcher_banner_title',
+              'launcher_banner_subtitle',
+            ],
+          },
+        },
+      });
+      for (const cfg of configs) {
+        if (cfg.key === 'company_website_url') companyWebsiteUrl = cfg.value;
+        if (cfg.key === 'launcher_banner_badge') launcherBanner.badge = cfg.value;
+        if (cfg.key === 'launcher_banner_title') launcherBanner.title = cfg.value;
+        if (cfg.key === 'launcher_banner_subtitle') launcherBanner.subtitle = cfg.value;
+      }
+    } catch {
+      // Silently ignore if SystemConfig table doesn't exist yet
+    }
+
     return {
       sessionDurationMinutes,
+      companyWebsiteUrl,
+      launcherBanner,
     };
   }
 

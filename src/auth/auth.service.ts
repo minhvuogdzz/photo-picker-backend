@@ -168,7 +168,9 @@ export class AuthService implements OnApplicationBootstrap {
       },
       deviceId: dto.deviceFingerprint,
       lastSyncAt: new Date().toISOString(),
-      sessionDurationMinutes: await this.getSessionDurationMinutes(),
+      sessionDurationMinutes: (user.subscription?.isPremium || user.subscription?.status === 'LIFETIME')
+        ? 0
+        : await this.getSessionDurationMinutes(),
     };
   }
 
@@ -277,7 +279,9 @@ export class AuthService implements OnApplicationBootstrap {
       },
       deviceId,
       lastSyncAt: new Date().toISOString(),
-      sessionDurationMinutes: await this.getSessionDurationMinutes(),
+      sessionDurationMinutes: (user.subscription?.isPremium || user.subscription?.status === 'LIFETIME')
+        ? 0
+        : await this.getSessionDurationMinutes(),
     };
 
     this.validationCache.set(cacheKey, { data: result, cachedAt: nowMs });
