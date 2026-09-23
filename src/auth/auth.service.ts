@@ -168,7 +168,7 @@ export class AuthService implements OnApplicationBootstrap {
       },
       deviceId: dto.deviceFingerprint,
       lastSyncAt: new Date().toISOString(),
-      sessionDurationMinutes: (user.subscription?.isPremium || user.subscription?.status === 'LIFETIME')
+      sessionDurationMinutes: user.subscription?.isPremium === true
         ? 0
         : await this.getSessionDurationMinutes(),
     };
@@ -279,7 +279,7 @@ export class AuthService implements OnApplicationBootstrap {
       },
       deviceId,
       lastSyncAt: new Date().toISOString(),
-      sessionDurationMinutes: (user.subscription?.isPremium || user.subscription?.status === 'LIFETIME')
+      sessionDurationMinutes: user.subscription?.isPremium === true
         ? 0
         : await this.getSessionDurationMinutes(),
     };
