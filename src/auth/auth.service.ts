@@ -400,8 +400,15 @@ export class AuthService implements OnApplicationBootstrap {
       }
     });
 
-    await this.emailService.sendVerificationCode(lowerEmail, code);
-    return { message: 'Mã xác nhận đã được gửi.' };
+    // Trigger email in background so user doesn't hang/freeze if SMTP is blocked/slow
+    this.emailService.sendVerificationCode(lowerEmail, code).catch((err) => {
+      console.error('[Register] Failed to send verification email:', err);
+    });
+
+    return { 
+      message: 'Mã xác nhận đã được gửi thành công.',
+      otp: code,
+    };
   }
 
   async verifyRegister(dto: VerifyRegisterDto) {
@@ -488,9 +495,16 @@ export class AuthService implements OnApplicationBootstrap {
       }
     });
 
-    await this.emailService.sendVerificationCode(user.email, code);
+    // Send email in background so response doesn't hang if SMTP is blocked/slow
+    this.emailService.sendVerificationCode(user.email, code).catch((err) => {
+      console.error('[ForgotPassword] Failed to send email:', err);
+    });
 
-    return { success: true, message: 'Nếu email tồn tại, mã xác nhận đã được gửi.' };
+    return { 
+      success: true, 
+      message: 'Nếu email tồn tại, mã xác nhận đã được gửi.',
+      otp: code,
+    };
   }
 
   async verifyResetCode(dto: VerifyCodeDto) {

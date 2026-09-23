@@ -12,18 +12,21 @@ export class EmailService {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS, // Use App Password for Gmail
       },
+      connectionTimeout: 5000,
+      greetingTimeout: 5000,
+      socketTimeout: 5000,
     });
   }
 
-  async sendVerificationCode(to: string, code: string) {
+  async sendVerificationCode(to: string, code: string): Promise<boolean> {
     const mailOptions = {
       from: `"Photo Picker Pro" <${process.env.SMTP_USER}>`,
       to,
-      subject: 'Mã xác nhận quên mật khẩu',
+      subject: 'Mã xác nhận tài khoản Photo Picker Pro',
       text: `Mã xác nhận của bạn là: ${code}. Mã này có hiệu lực trong 10 phút.`,
       html: `
         <div style="font-family: Arial, sans-serif; padding: 20px;">
-          <h2>Khôi phục mật khẩu</h2>
+          <h2>Xác nhận tài khoản Photo Picker Pro</h2>
           <p>Mã xác nhận của bạn là:</p>
           <h1 style="color: #4F46E5; letter-spacing: 5px;">${code}</h1>
           <p>Mã này có hiệu lực trong 10 phút. Vui lòng không chia sẻ mã này cho bất kỳ ai.</p>
@@ -32,7 +35,10 @@ export class EmailService {
     };
 
     try {
-      await this.transporter.sendMail(mailOptions);
+      await Promise.race([
+        this.transporter.sendMail(mailOptions),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('SMTP_TIMEOUT')), 5000)),
+      ]);
       return true;
     } catch (error) {
       console.error('Lỗi khi gửi email:', error);
