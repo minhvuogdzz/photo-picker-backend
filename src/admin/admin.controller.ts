@@ -5,12 +5,16 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '@prisma/client';
 import { CreateUserDto, UpdateSubscriptionDto } from './dto/admin.dto';
+import { EmailService } from '../email/email.service';
 
 @Controller('admin')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(Role.ADMIN)
 export class AdminController {
-  constructor(private readonly adminService: AdminService) {}
+  constructor(
+    private readonly adminService: AdminService,
+    private readonly emailService: EmailService,
+  ) {}
 
   @Get('dashboard')
   getDashboardStats() {
@@ -63,5 +67,11 @@ export class AdminController {
   @Post('config')
   updateSystemConfig(@Body() body: { key: string; value: string; description?: string }) {
     return this.adminService.updateSystemConfig(body.key, body.value, body.description);
+  }
+
+  @Post('email/test')
+  async testEmail(@Body() body: { to: string }) {
+    const result = await this.emailService.testEmail(body.to || 'ougvn.it2@gmail.com');
+    return { success: result.success, data: result };
   }
 }
