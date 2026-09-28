@@ -9,39 +9,62 @@ datasource db {
 }
 
 model User {
-  id               String             @id @default(auto()) @map("_id") @db.ObjectId
-  email            String             @unique
-  username         String?            @unique
-  password         String
-  name             String
-  role             Role               @default(USER)
-  createdAt        DateTime           @default(now())
-  updatedAt        DateTime           @updatedAt
-  subscription     Subscription?
-  devices          Device[]
+  id                String             @id @default(auto()) @map("_id") @db.ObjectId
+  email             String             @unique
+  username          String?            @unique
+  password          String
+  name              String
+  phone             String?
+  role              Role               @default(USER)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  subscription      Subscription?
+  devices           Device[]
   verificationCodes VerificationCode[]
-  licenseKeys      LicenseKey[]
+  licenseKeys       LicenseKey[]
+  orders            Order[]
+}
+
+type Entitlement {
+  app       String    // "ALL" | "photo-picker" | "contact-the-sheet" | "photo-counter" | "mvd-convert" | "resources"
+  expiresAt DateTime
+  isTrial   Boolean   @default(false)
+}
+
+enum SubscriptionStatus {
+  INACTIVE
+  TRIAL
+  ACTIVE
+  EXPIRED
+  SUSPENDED
+  CANCELLED
+}
+
+enum SubscriptionPlan {
+  STARTER
+  PROFESSIONAL
+  STUDIO
 }
 
 model Subscription {
-  id            String             @id @default(auto()) @map("_id") @db.ObjectId
-  userId        String             @unique @db.ObjectId
-  user          User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  status        SubscriptionStatus @default(INACTIVE)
-  plan          SubscriptionPlan   @default(STARTER)
-  isPremium     Boolean            @default(false)
-  expiresAt     DateTime?
-  createdAt     DateTime           @default(now())
-  updatedAt     DateTime           @updatedAt
+  id           String             @id @default(auto()) @map("_id") @db.ObjectId
+  userId       String             @unique @db.ObjectId
+  user         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status       SubscriptionStatus @default(TRIAL)
+  plan         SubscriptionPlan   @default(STARTER)
+  entitlements Entitlement[]
+  expiresAt    DateTime?          // Mốc xa nhất của các entitlements
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
 }
 
 model Device {
-  id               String   @id @default(auto()) @map("_id") @db.ObjectId
-  userId           String   @db.ObjectId
-  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  deviceFingerprint String  @unique
-  lastActiveAt     DateTime @default(now())
-  createdAt        DateTime @default(now())
+  id                String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId            String   @db.ObjectId
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deviceFingerprint String   @unique
+  lastActiveAt      DateTime @default(now())
+  createdAt         DateTime @default(now())
 
   @@index([userId])
 }
@@ -70,45 +93,62 @@ enum Role {
   ADMIN
 }
 
-enum SubscriptionStatus {
-  INACTIVE
-  TRIAL
-  ACTIVE
-  EXPIRED
-  SUSPENDED
-  CANCELLED
-  LIFETIME
-}
-
-enum SubscriptionPlan {
-  STARTER
-  PROFESSIONAL
-  STUDIO
-  LIFETIME
-}
-
 enum KeyType {
   ORIGINAL
   PREMIUM
 }
 
-model LicenseKey {
-  id           String    @id @default(auto()) @map("_id") @db.ObjectId
-  key          String    @unique
-  keyType      KeyType   @default(ORIGINAL)
-  durationDays Int       @default(90)
-  status       KeyStatus @default(UNUSED)
-  userId       String?   @db.ObjectId
-  user         User?     @relation(fields: [userId], references: [id])
-  activatedAt  DateTime?
-  createdAt    DateTime  @default(now())
-}
-
-
 enum KeyStatus {
   UNUSED
   ACTIVE
   EXPIRED
+}
+
+model LicenseKey {
+  id           String    @id @default(auto()) @map("_id") @db.ObjectId
+  key          String    @unique
+  targetApp    String    @default("ALL") // "ALL" hoặc app cụ thể
+  keyType      KeyType?  @default(ORIGINAL)
+  durationDays Int       @default(30)
+  status       KeyStatus @default(UNUSED)
+  userId       String?   @db.ObjectId
+  user         User?     @relation(fields: [userId], references: [id])
+  activatedAt  DateTime?
+  orderId      String?   @db.ObjectId
+  note         String?   // Ghi chú của Admin (VD: Tặng khuyến mại)
+  createdAt    DateTime  @default(now())
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  PARTIAL
+  CANCELLED
+}
+
+model Order {
+  id                 String      @id @default(auto()) @map("_id") @db.ObjectId
+  orderCode          String      @unique
+  userId             String      @db.ObjectId
+  user               User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  buyerName          String
+  buyerEmail         String
+  buyerPhone         String
+  targetApp          String      // "ALL" hoặc "photo-picker"
+  packageName        String      // "Gói Super App 12 tháng"
+  amount             Int         // VND
+  durationDays       Int         // 30, 90, 180, 365
+  status             OrderStatus @default(PENDING)
+  generatedKey       String?
+  sepayTransactionId String?     @unique
+  paidAmount         Int?        @default(0)
+  paidAt             DateTime?
+  paymentNote        String?
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+
+  @@index([userId])
+  @@index([status])
 }
 
 model ShowcaseImage {
@@ -174,4 +214,3 @@ model SystemConfig {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
-

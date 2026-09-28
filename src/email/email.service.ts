@@ -6,21 +6,24 @@ export class EmailService {
   private transporter: nodemailer.Transporter;
 
   constructor() {
+    const user = (process.env.SMTP_USER || '').trim();
+    const pass = (process.env.SMTP_PASS || '').trim();
     this.transporter = nodemailer.createTransport({
-      service: 'gmail', // You can change this to any SMTP provider
+      service: 'gmail',
       auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS, // Use App Password for Gmail
+        user,
+        pass,
       },
-      connectionTimeout: 5000,
-      greetingTimeout: 5000,
-      socketTimeout: 5000,
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 10000,
     });
   }
 
   async sendVerificationCode(to: string, code: string): Promise<boolean> {
+    const user = (process.env.SMTP_USER || '').trim();
     const mailOptions = {
-      from: `"Photo Picker Pro" <${process.env.SMTP_USER}>`,
+      from: `"MVD Academy" <${user}>`,
       to,
       subject: 'Mã xác nhận tài khoản Photo Picker Pro',
       text: `Mã xác nhận của bạn là: ${code}. Mã này có hiệu lực trong 10 phút.`,
@@ -37,26 +40,29 @@ export class EmailService {
     try {
       await Promise.race([
         this.transporter.sendMail(mailOptions),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('SMTP_TIMEOUT')), 5000)),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('SMTP_TIMEOUT')), 10000)),
       ]);
       return true;
     } catch (error) {
-      console.error('Lỗi khi gửi email:', error);
+      console.error('[EmailService] Lỗi khi gửi verification code:', error);
       return false;
     }
   }
-  async sendEmail(to: string, subject: string, content: string) {
+
+  async sendEmail(to: string, subject: string, content: string): Promise<boolean> {
+    const user = (process.env.SMTP_USER || '').trim();
     const mailOptions = {
-      from: `"Photo Picker Pro" <${process.env.SMTP_USER}>`,
+      from: `"MVD Academy" <${user}>`,
       to,
       subject,
       text: content,
     };
     try {
-      await this.transporter.sendMail(mailOptions);
+      const info = await this.transporter.sendMail(mailOptions);
+      console.log(`[EmailService] Email sent successfully to ${to}, messageId: ${info.messageId}`);
       return true;
     } catch (error) {
-      console.error('Lỗi khi gửi email:', error);
+      console.error('[EmailService] Lỗi khi gửi email:', error);
       return false;
     }
   }

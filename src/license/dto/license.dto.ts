@@ -10,8 +10,12 @@ export class GenerateKeysDto {
   durationDays?: number;
 
   @IsOptional()
-  @IsEnum(KeyType)
-  keyType?: KeyType; // ORIGINAL | PREMIUM
+  @IsString()
+  targetApp?: string;
+
+  @IsOptional()
+  @IsString()
+  note?: string;
 }
 
 export class ActivateKeyDto {

@@ -32,6 +32,7 @@ export class UpdateSubscriptionDto {
   addDays?: number;
 
   @IsOptional()
-  isPremium?: boolean;
+  @IsString()
+  targetApp?: string;
 }
 

@@ -56,7 +56,18 @@ export class ResourceService {
         updatedAt: true,
       },
       orderBy: [{ order: 'asc' }, { createdAt: 'desc' }],
-    });
+    }).then((list) => list.map((item) => this.stripDownloadUrl(item)));
+  }
+
+  /**
+   * SECURITY: KHÔNG trả `downloadUrl` (link Google Drive) ra danh sách công khai.
+   * Nếu trả về thì mọi người đều lấy được link tải trực tiếp mà không cần mua gói,
+   * làm vô hiệu hoá toàn bộ cơ chế kiểm tra quyền ở endpoint tải. Client chỉ cần biết
+   * "có link hay không" để hiển thị nút; link thật lấy qua endpoint có xác thực.
+   */
+  private stripDownloadUrl<T extends { downloadUrl?: string | null }>(item: T) {
+    const { downloadUrl, ...rest } = item;
+    return { ...rest, hasDownloadUrl: !!downloadUrl };
   }
 
   /**
@@ -123,7 +134,7 @@ export class ResourceService {
       throw new NotFoundException('Không tìm thấy tài nguyên');
     }
 
-    return resource;
+    return this.stripDownloadUrl(resource);
   }
 
   /**

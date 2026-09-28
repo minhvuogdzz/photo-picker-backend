@@ -2,6 +2,7 @@ import { Injectable, UnauthorizedException, ForbiddenException, NotFoundExceptio
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
+import * as crypto from 'crypto';
 import { EmailService } from '../email/email.service';
 import { LoginDto, ResetPasswordDto, ForgotPasswordDto, VerifyCodeDto, RegisterDto, VerifyRegisterDto, UpdateProfileDto, ChangePasswordDto } from './dto/auth.dto';
 import { SyncGateway } from '../sync/sync.gateway';
@@ -60,11 +61,35 @@ export class AuthService implements OnApplicationBootstrap {
           userId: user.id,
           status: 'TRIAL',
           plan: 'STARTER',
-          expiresAt
-        }
+          expiresAt,
+          entitlements: [
+            {
+              app: 'ALL',
+              expiresAt,
+              isTrial: true,
+            },
+          ],
+        },
       });
     } else if (user.subscription.status === 'SUSPENDED') {
       throw new ForbiddenException('Tài khoản của bạn đã bị khoá.');
+    }
+
+    // Ensure entitlements array exists
+    if (!user.subscription.entitlements || user.subscription.entitlements.length === 0) {
+      const subExpiry = user.subscription.expiresAt || new Date(Date.now() + 3 * 86400000);
+      const isTrial = user.subscription.status === 'TRIAL';
+      user.subscription.entitlements = [
+        {
+          app: 'ALL',
+          expiresAt: subExpiry,
+          isTrial,
+        },
+      ];
+      await this.prisma.subscription.update({
+        where: { id: user.subscription.id },
+        data: { entitlements: user.subscription.entitlements },
+      });
     }
 
     // Handle device fingerprint
@@ -143,7 +168,7 @@ export class AuthService implements OnApplicationBootstrap {
       const diffTime = expiresAt.getTime() - now.getTime();
       daysRemaining = Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
       
-      if (daysRemaining === 0 && user.subscription.status !== 'LIFETIME') {
+      if (daysRemaining === 0) {
         await this.prisma.subscription.update({
           where: { id: user.subscription.id },
           data: { status: 'EXPIRED' }
@@ -152,6 +177,15 @@ export class AuthService implements OnApplicationBootstrap {
       }
     }
 
+    const entitlements = user.subscription?.entitlements || [];
+    const now = new Date();
+    const hasPaidPlan = entitlements.some(
+      (e: any) => !e.isTrial && new Date(e.expiresAt) > now,
+    );
+    // Chỉ tài khoản ĐÃ TRẢ PHÍ (và admin) mới không bị giới hạn thời lượng phiên.
+    // Tài khoản dùng thử vẫn áp thời lượng phiên do admin cấu hình.
+    const isUnlimited = hasPaidPlan || user.role === 'ADMIN';
+
     return {
       accessToken,
       refreshToken,
@@ -159,16 +193,17 @@ export class AuthService implements OnApplicationBootstrap {
       email: user.email,
       username: user.username || user.email.split('@')[0],
       name: user.name,
+      role: user.role,
       subscription: {
         status: user.subscription?.status || 'INACTIVE',
         plan: user.subscription?.plan || 'STARTER',
-        isPremium: user.subscription?.isPremium ?? false,
         expiresAt: user.subscription?.expiresAt || null,
         daysRemaining,
+        entitlements,
       },
       deviceId: dto.deviceFingerprint,
       lastSyncAt: new Date().toISOString(),
-      sessionDurationMinutes: user.subscription?.isPremium === true
+      sessionDurationMinutes: isUnlimited
         ? 0
         : await this.getSessionDurationMinutes(),
     };
@@ -251,7 +286,7 @@ export class AuthService implements OnApplicationBootstrap {
       const diffTime = expiresAt.getTime() - now.getTime();
       daysRemaining = Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
       
-      if (daysRemaining === 0 && user.subscription.status !== 'LIFETIME') {
+      if (daysRemaining === 0) {
         await this.prisma.subscription.update({
           where: { id: user.subscription.id },
           data: { status: 'EXPIRED' }
@@ -265,21 +300,29 @@ export class AuthService implements OnApplicationBootstrap {
       throw new ForbiddenException('SUBSCRIPTION_INVALID');
     }
 
+    const entitlements = user.subscription?.entitlements || [];
+    const now = new Date();
+    const hasPaidPlan = entitlements.some(
+      (e: any) => !e.isTrial && new Date(e.expiresAt) > now,
+    );
+    const isUnlimited = hasPaidPlan || user.role === 'ADMIN';
+
     const result = {
       userId: user.id,
       email: user.email,
       username: user.username || user.email.split('@')[0],
       name: user.name,
+      role: user.role,
       subscription: {
         status: user.subscription?.status || 'INACTIVE',
         plan: user.subscription?.plan || 'STARTER',
-        isPremium: user.subscription?.isPremium ?? false,
         expiresAt: user.subscription?.expiresAt || null,
         daysRemaining,
+        entitlements,
       },
       deviceId,
       lastSyncAt: new Date().toISOString(),
-      sessionDurationMinutes: user.subscription?.isPremium === true
+      sessionDurationMinutes: isUnlimited
         ? 0
         : await this.getSessionDurationMinutes(),
     };
@@ -336,6 +379,8 @@ export class AuthService implements OnApplicationBootstrap {
         daysRemaining = Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
       }
 
+      const refreshEntitlements = user.subscription?.entitlements || [];
+
       return {
         accessToken: newAccessToken,
         refreshToken: newRefreshToken,
@@ -343,12 +388,13 @@ export class AuthService implements OnApplicationBootstrap {
         email: user.email,
         username: user.username || user.email.split('@')[0],
         name: user.name,
+        role: user.role,
         subscription: {
           status: user.subscription?.status || 'INACTIVE',
           plan: user.subscription?.plan || 'STARTER',
-          isPremium: user.subscription?.isPremium ?? false,
           expiresAt: user.subscription?.expiresAt || null,
           daysRemaining,
+          entitlements: refreshEntitlements,
         },
         deviceId,
         lastSyncAt: new Date().toISOString(),
@@ -407,7 +453,6 @@ export class AuthService implements OnApplicationBootstrap {
 
     return { 
       message: 'Mã xác nhận đã được gửi thành công.',
-      otp: code,
     };
   }
 
@@ -452,7 +497,14 @@ export class AuthService implements OnApplicationBootstrap {
         userId: user.id,
         status: 'TRIAL',
         plan: 'STARTER',
-        expiresAt
+        expiresAt,
+        entitlements: [
+          {
+            app: 'ALL',
+            expiresAt,
+            isTrial: true,
+          },
+        ],
       }
     });
 
@@ -466,15 +518,41 @@ export class AuthService implements OnApplicationBootstrap {
   }
 
   // Generate random 6-digit code
+  // SECURITY: dùng crypto.randomInt thay cho Math.random() — Math.random() không phải
+  // CSPRNG, biết vài mã trước là đoán được mã sau nên có thể chiếm tài khoản khác.
   private generateOTP(): string {
-    return Math.floor(100000 + Math.random() * 900000).toString();
+    return crypto.randomInt(100000, 1000000).toString();
+  }
+
+  /** Tìm user theo email hoặc username (chuẩn hoá giống mọi luồng reset khác). */
+  private async findUserByIdentifier(rawIdentifier: string) {
+    const identifier = (rawIdentifier || '').trim().toLowerCase();
+    if (!identifier) return null;
+    return this.prisma.user.findFirst({
+      where: {
+        OR: [{ email: identifier }, { username: identifier }],
+      },
+    });
   }
 
   async forgotPassword(dto: ForgotPasswordDto) {
-    const user = await this.prisma.user.findUnique({ where: { email: dto.email } });
+    const user = await this.findUserByIdentifier(dto.email);
     if (!user) {
       // Don't reveal if user exists or not for security
       return { success: true, message: 'Nếu email tồn tại, mã xác nhận đã được gửi.' };
+    }
+
+    // Chống spam email + chống "xoay mã liên tục để reset bộ đếm attempts":
+    // mỗi 60 giây chỉ cho phát hành 1 mã.
+    const recentCode = await this.prisma.verificationCode.findFirst({
+      where: { userId: user.id, type: 'PASSWORD_RESET' },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (recentCode && Date.now() - new Date(recentCode.createdAt).getTime() < 60_000) {
+      return {
+        success: true,
+        message: 'Nếu email tồn tại, mã xác nhận đã được gửi.',
+      };
     }
 
     // Delete any existing unused codes
@@ -503,44 +581,62 @@ export class AuthService implements OnApplicationBootstrap {
     return { 
       success: true, 
       message: 'Nếu email tồn tại, mã xác nhận đã được gửi.',
-      otp: code,
     };
   }
 
-  async verifyResetCode(dto: VerifyCodeDto) {
-    const user = await this.prisma.user.findUnique({ where: { email: dto.email } });
-    if (!user) throw new BadRequestException('Mã xác nhận không hợp lệ');
-
+  /**
+   * Kiểm tra mã OTP của user và ĐẾM số lần sai. Dùng chung cho verifyResetCode và
+   * resetPassword để không có đường nào bỏ qua bộ đếm attempts.
+   */
+  private async consumeResetCodeAttempt(userId: string, rawCode: string) {
     const verification = await this.prisma.verificationCode.findFirst({
-      where: { userId: user.id, code: dto.code, type: 'PASSWORD_RESET' }
+      where: { userId, type: 'PASSWORD_RESET' },
+      orderBy: { createdAt: 'desc' },
     });
 
-    if (!verification) {
-      throw new BadRequestException('Mã xác nhận không hợp lệ');
-    }
-
-    if (verification.expiresAt < new Date()) {
-      throw new BadRequestException('Mã xác nhận đã hết hạn');
+    if (!verification || verification.expiresAt < new Date()) {
+      throw new BadRequestException('Mã xác nhận không tồn tại hoặc đã hết hạn');
     }
 
     if (verification.attempts >= 5) {
-      throw new BadRequestException('Bạn đã nhập sai quá nhiều lần. Vui lòng yêu cầu mã mới.');
+      await this.prisma.verificationCode.delete({ where: { id: verification.id } }).catch(() => {});
+      throw new BadRequestException('Bạn đã nhập sai quá 5 lần. Mã xác nhận đã bị thu hồi vì lý do an toàn. Vui lòng gửi lại yêu cầu mới.');
     }
+
+    if (verification.code !== (rawCode || '').trim()) {
+      const updated = await this.prisma.verificationCode.update({
+        where: { id: verification.id },
+        data: { attempts: { increment: 1 } }
+      });
+      const remaining = 5 - updated.attempts;
+      throw new BadRequestException(
+        remaining > 0
+          ? `Mã xác nhận không chính xác. Bạn còn ${remaining} lần thử.`
+          : 'Bạn đã nhập sai quá 5 lần. Mã xác nhận đã bị vô hiệu hoá.'
+      );
+    }
+
+    return verification;
+  }
+
+  async verifyResetCode(dto: VerifyCodeDto) {
+    const user = await this.findUserByIdentifier(dto.email);
+    if (!user) throw new BadRequestException('Mã xác nhận không hợp lệ hoặc đã hết hạn');
+
+    await this.consumeResetCodeAttempt(user.id, dto.code);
 
     return { valid: true };
   }
 
   async resetPassword(dto: ResetPasswordDto) {
-    const user = await this.prisma.user.findUnique({ where: { email: dto.email } });
+    // SECURITY: phải tra cứu giống verifyResetCode (email HOẶC username, đã lowercase)
+    // và phải đi qua bộ đếm attempts. Trước đây hàm này query thẳng theo `code` nên
+    // sai mã chỉ trả về "không hợp lệ" mà KHÔNG tăng attempts → brute-force 6 chữ số
+    // (1 triệu khả năng) để chiếm bất kỳ tài khoản nào, kể cả admin.
+    const user = await this.findUserByIdentifier(dto.email);
     if (!user) throw new BadRequestException('Mã xác nhận không hợp lệ');
 
-    const verification = await this.prisma.verificationCode.findFirst({
-      where: { userId: user.id, code: dto.code, type: 'PASSWORD_RESET' }
-    });
-
-    if (!verification || verification.expiresAt < new Date() || verification.attempts >= 5) {
-      throw new BadRequestException('Mã xác nhận không hợp lệ hoặc đã hết hạn');
-    }
+    const verification = await this.consumeResetCodeAttempt(user.id, dto.code);
 
     const hashedPassword = await bcrypt.hash(dto.newPassword, 10);
 

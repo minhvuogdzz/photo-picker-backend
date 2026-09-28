@@ -17,7 +17,7 @@ export class AdminService {
   async getDashboardStats() {
     const totalUsers = await this.prisma.user.count({ where: { role: 'USER' } });
     const activeSubscriptions = await this.prisma.subscription.count({
-      where: { status: { in: ['ACTIVE', 'LIFETIME'] } }
+      where: { status: 'ACTIVE' }
     });
     const totalDevices = await this.prisma.device.count({
       where: { user: { role: 'USER' } }
@@ -39,7 +39,7 @@ export class AdminService {
   }
 
   // 3. Extend or update subscription
-  async updateSubscription(userId: string, data: { plan?: SubscriptionPlan; status?: SubscriptionStatus; addDays?: number; isPremium?: boolean }) {
+  async updateSubscription(userId: string, data: { plan?: SubscriptionPlan; status?: SubscriptionStatus; addDays?: number; targetApp?: string }) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       include: { subscription: true }
@@ -50,19 +50,37 @@ export class AdminService {
     const updateData: any = {};
     if (data.plan !== undefined) updateData.plan = data.plan;
     if (data.status !== undefined) updateData.status = data.status;
-    if (data.isPremium !== undefined) updateData.isPremium = data.isPremium;
     
+    const targetApp = data.targetApp || 'ALL';
+
     if (data.addDays) {
-      let currentExpiry = user.subscription?.expiresAt ? new Date(user.subscription.expiresAt) : new Date();
-      if (currentExpiry < new Date()) {
-        currentExpiry = new Date(); // If expired, start from today
+      const existingEntitlements = user.subscription?.entitlements || [];
+      const now = new Date();
+      const existing = existingEntitlements.find(e => e.app === targetApp);
+
+      let newExpiry: Date;
+      if (existing && new Date(existing.expiresAt) > now) {
+        newExpiry = new Date(new Date(existing.expiresAt).getTime() + data.addDays * 24 * 60 * 60 * 1000);
+      } else {
+        newExpiry = new Date(now.getTime() + data.addDays * 24 * 60 * 60 * 1000);
       }
-      
-      const newExpiry = new Date(currentExpiry.getTime() + data.addDays * 24 * 60 * 60 * 1000);
-      updateData.expiresAt = newExpiry;
-      
+
+      const updatedEntitlements = [
+        ...existingEntitlements.filter(e => e.app !== targetApp),
+        {
+          app: targetApp,
+          expiresAt: newExpiry,
+          isTrial: false,
+        }
+      ];
+
+      updateData.entitlements = updatedEntitlements;
+      updateData.expiresAt = new Date(
+        Math.max(...updatedEntitlements.map(e => new Date(e.expiresAt).getTime()))
+      );
+
       // Auto active if adding days
-      if (!data.status && updateData.status !== 'LIFETIME') {
+      if (!data.status) {
         updateData.status = 'ACTIVE';
       }
     }
@@ -72,6 +90,8 @@ export class AdminService {
       resultSub = await this.prisma.subscription.create({
         data: {
           userId,
+          status: 'ACTIVE',
+          plan: 'PROFESSIONAL',
           ...updateData,
         }
       });
@@ -100,7 +120,7 @@ export class AdminService {
       this.syncGateway.emitToUser(userId, 'subscriptionUpdated', {
         status: resultSub.status,
         plan: resultSub.plan,
-        isPremium: resultSub.isPremium,
+        entitlements: resultSub.entitlements,
         expiresAt: resultSub.expiresAt,
       });
     }
@@ -256,7 +276,52 @@ export class AdminService {
 
   // 10. Update System Configuration
   async updateSystemConfig(key: string, value: string, description?: string) {
-    const stringValue = String(value);
+    const stringValue = String(value ?? '').trim();
+
+    // SECURITY: chặn lưu giá trị rỗng/không hợp lệ cho các khoá quan trọng.
+    // Lưu rỗng `sepay_webhook_api_key` sẽ làm webhook mất xác thực; lưu rỗng thông tin
+    // ngân hàng sẽ sinh mã QR sai tài khoản nhận tiền.
+    const criticalKeys: Record<string, { label: string; validate?: (v: string) => boolean; hint?: string }> = {
+      sepay_webhook_api_key: {
+        label: 'SePay Webhook API Key',
+        validate: (v) => v.length >= 16,
+        hint: 'tối thiểu 16 ký tự',
+      },
+      bank_bin: {
+        label: 'Mã BIN ngân hàng',
+        validate: (v) => /^\d{6}$/.test(v),
+        hint: 'đúng 6 chữ số',
+      },
+      bank_account_no: {
+        label: 'Số tài khoản ngân hàng',
+        validate: (v) => /^\d{6,20}$/.test(v),
+        hint: '6-20 chữ số',
+      },
+      bank_account_name: {
+        label: 'Tên chủ tài khoản',
+        validate: (v) => v.length >= 3,
+      },
+      session_duration_minutes: {
+        label: 'Thời lượng phiên (phút)',
+        validate: (v) => /^\d+$/.test(v) && parseInt(v, 10) > 0 && parseInt(v, 10) <= 10080,
+        hint: 'số nguyên từ 1 đến 10080',
+      },
+    };
+
+    const rule = criticalKeys[key];
+    if (rule) {
+      if (!stringValue) {
+        throw new BadRequestException(
+          `${rule.label} không được để trống. Nếu chưa muốn thay đổi, hãy giữ nguyên giá trị cũ.`,
+        );
+      }
+      if (rule.validate && !rule.validate(stringValue)) {
+        throw new BadRequestException(
+          `${rule.label} không hợp lệ${rule.hint ? ` (${rule.hint})` : ''}.`,
+        );
+      }
+    }
+
     const updated = await this.prisma.systemConfig.upsert({
       where: { key },
       create: { key, value: stringValue, description },
