@@ -306,6 +306,11 @@ export class AdminService {
         validate: (v) => /^\d+$/.test(v) && parseInt(v, 10) > 0 && parseInt(v, 10) <= 10080,
         hint: 'số nguyên từ 1 đến 10080',
       },
+      legacy_resource_compat: {
+        label: 'Chế độ tương thích app cũ (Kho Tài Nguyên)',
+        validate: (v) => v === 'true' || v === 'false',
+        hint: "chỉ nhận 'true' hoặc 'false'",
+      },
     };
 
     const rule = criticalKeys[key];

@@ -62,13 +62,21 @@ export class ResourceController {
    * downloadResource(id) (đọc file + tăng bộ đếm downloads) rồi mới xác thực, nên
    * người lạ vẫn bơm được số liệu tải và tạo tải nặng cho server.
    */
-  private async assertDownloadPermission(req: Request, queryToken?: string) {
+  private async assertDownloadPermission(
+    req: Request,
+    queryToken?: string,
+    allowLegacyAnonymous = false,
+  ) {
     const authHeader = req.headers.authorization;
     const bearerToken = authHeader?.startsWith('Bearer ')
       ? authHeader.substring(7)
       : queryToken;
 
     if (!bearerToken) {
+      // App desktop <= 2.4.4 gọi endpoint này KHÔNG kèm token. Chặn ngay sẽ làm mọi
+      // máy chưa cập nhật mất chức năng tải, nên trong thời gian tương thích thì cho
+      // qua; admin tắt `legacy_resource_compat` là siết lại.
+      if (allowLegacyAnonymous) return;
       throw new UnauthorizedException('Tải tài nguyên yêu cầu đăng nhập tài khoản.');
     }
 
@@ -143,7 +151,11 @@ export class ResourceController {
     @Query('token') queryToken: string,
     @Res() res: Response,
   ) {
-    await this.assertDownloadPermission(req, queryToken);
+    await this.assertDownloadPermission(
+      req,
+      queryToken,
+      await this.resourceService.isLegacyCompatEnabled(),
+    );
 
     const resource = await this.resourceService.downloadResource(id);
 
