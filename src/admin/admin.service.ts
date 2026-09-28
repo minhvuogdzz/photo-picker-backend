@@ -220,7 +220,7 @@ export class AdminService {
 
     for (const user of expiredUsers) {
       this.syncGateway.emitToUser(user.id, 'copyrightWarning', {
-        message: 'MVD Photoshop Academy warning: Tài khoản của bạn không có bản quyền hợp lệ hoặc đã hết hạn dùng thử.'
+        message: 'MVD Tech & Design Studio warning: Tài khoản của bạn không có bản quyền hợp lệ hoặc đã hết hạn dùng thử.'
       });
     }
 

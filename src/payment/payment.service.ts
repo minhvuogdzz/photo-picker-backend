@@ -508,7 +508,7 @@ export class PaymentService {
     const companyUrl = map.get('company_website_url') || 'https://mvdptsacademy.mvdtech.workers.dev/';
     const cleanWebUrl = companyUrl.replace(/https?:\/\//, '').replace(/\/$/, '');
 
-    const subject = `[MVD ACADEMY] KÍCH HOẠT BẢN QUYỀN THÀNH CÔNG - ĐƠN HÀNG #${order.orderCode}`;
+    const subject = `[MVD TECH & DESIGN STUDIO] KÍCH HOẠT BẢN QUYỀN THÀNH CÔNG - ĐƠN HÀNG #${order.orderCode}`;
 
     const htmlContent = `
 <!DOCTYPE html>
@@ -526,9 +526,9 @@ export class PaymentService {
 
     <!-- Header Brand Banner -->
     <div style="padding: 32px 36px 20px 36px; text-align: center; border-bottom: 1px solid #f1f5f9; background: #fafafa;">
-      <div style="display: inline-block; padding: 7px 18px; background: #0f172a; border-radius: 10px; margin-bottom: 14px;">
-        <span style="font-size: 15px; font-weight: 800; letter-spacing: 1.5px; color: #ffffff;">MVD STUDIO</span>
-        <span style="font-size: 13px; font-weight: 700; color: #38bdf8; margin-left: 4px;">SUITE</span>
+      <div style="display: inline-block; padding: 8px 20px; background: #0f172a; border-radius: 10px; margin-bottom: 14px; border: 1px solid #1e293b;">
+        <span style="font-size: 14px; font-weight: 800; letter-spacing: 1.5px; color: #ffffff;">MVD TECH & DESIGN</span>
+        <span style="font-size: 13px; font-weight: 700; color: #38bdf8; margin-left: 4px;">STUDIO</span>
       </div>
       <h1 style="margin: 0 0 6px 0; font-size: 21px; font-weight: 700; color: #0f172a; letter-spacing: -0.5px;">XÁC NHẬN BẢN QUYỀN CHÍNH THỨC</h1>
       <p style="margin: 0; font-size: 13px; color: #64748b;">Hệ thống ứng dụng tự động hoá studio & sáng tạo nội dung</p>
@@ -542,7 +542,7 @@ export class PaymentService {
         Xin chào <strong>${order.buyerName}</strong>,
       </p>
       <p style="margin: 0 0 20px 0; font-size: 14px; line-height: 1.6; color: #475569;">
-        MVD Academy trân trọng cảm ơn bạn đã đăng ký <strong>${order.packageName}</strong>. Đơn hàng <strong>#${order.orderCode}</strong> đã được hệ thống ghi nhận thanh toán thành công.
+        MVD Tech & Design Studio trân trọng cảm ơn bạn đã đăng ký <strong>${order.packageName}</strong>. Đơn hàng <strong>#${order.orderCode}</strong> đã được hệ thống ghi nhận thanh toán thành công.
       </p>
 
       <!-- Success Notification Pill -->
@@ -616,15 +616,15 @@ export class PaymentService {
     <!-- Modern Dark Footer -->
     <div style="padding: 24px 36px; background: #0f172a; text-align: center; color: #94a3b8; font-size: 12px; line-height: 1.6;">
       <div style="font-weight: 700; color: #ffffff; font-size: 13px; margin-bottom: 6px;">
-        MVD ACADEMY · MVD TECH & DESIGN STUDIO
+        MVD TECH & DESIGN STUDIO
       </div>
       <p style="margin: 0 0 10px 0;">
         Zalo / Hotline: <strong style="color: #38bdf8;">${supportZalo}</strong> &nbsp;|&nbsp; Website: <a href="${companyUrl}" style="color: #38bdf8; text-decoration: none;">${cleanWebUrl}</a>
       </p>
       <div style="height: 1px; background: #1e293b; margin: 12px 0;"></div>
       <p style="margin: 0; font-size: 11px; color: #64748b;">
-        © 2026 MVD Academy. Toàn bộ quyền được bảo lưu.<br>
-        Email này được tạo tự động từ hệ thống quản lý giấy phép bản quyền MVD Studio Suite.
+        © 2026 MVD Tech & Design Studio. Toàn bộ quyền được bảo lưu.<br>
+        Email này được tạo tự động từ hệ thống quản lý giấy phép bản quyền MVD Tech & Design Studio.
       </p>
     </div>
   </div>

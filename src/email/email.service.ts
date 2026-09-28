@@ -51,7 +51,7 @@ export class EmailService {
     const smtpUser = map.get('smtp_user') || (process.env.SMTP_USER || '').trim();
     const smtpPass = map.get('smtp_pass') || (process.env.SMTP_PASS || '').trim();
     const fromEmail = map.get('email_from_address') || (process.env.EMAIL_FROM || '').trim();
-    const fromName = map.get('email_from_name') || 'MVD Academy';
+    const fromName = map.get('email_from_name') || 'MVD Tech & Design Studio';
 
     let provider = (map.get('email_provider') || 'auto').toLowerCase();
     if (provider === 'auto') {
@@ -291,16 +291,21 @@ export class EmailService {
 
   async sendVerificationCode(to: string, code: string): Promise<boolean> {
     const html = `
-      <div style="font-family: Arial, sans-serif; padding: 20px;">
-        <h2>Xác nhận tài khoản Photo Picker Pro</h2>
-        <p>Mã xác nhận của bạn là:</p>
-        <h1 style="color: #4F46E5; letter-spacing: 5px;">${code}</h1>
-        <p>Mã này có hiệu lực trong 10 phút. Vui lòng không chia sẻ mã này cho bất kỳ ai.</p>
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; padding: 24px; max-width: 500px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
+        <div style="display: inline-block; padding: 6px 14px; background: #0f172a; border-radius: 8px; color: #ffffff; font-size: 13px; font-weight: 700; margin-bottom: 16px;">
+          MVD TECH & DESIGN STUDIO
+        </div>
+        <h2 style="color: #0f172a; margin-top: 0; font-size: 18px;">Xác nhận tài khoản của bạn</h2>
+        <p style="color: #475569; font-size: 14px;">Mã xác thực OTP của bạn là:</p>
+        <div style="background: #f1f5f9; padding: 14px 20px; border-radius: 8px; text-align: center; margin: 16px 0;">
+          <span style="font-family: monospace; font-size: 26px; font-weight: 800; color: #0284c7; letter-spacing: 6px;">${code}</span>
+        </div>
+        <p style="color: #64748b; font-size: 12px; margin-bottom: 0;">Mã này có hiệu lực trong 10 phút. Tuyệt đối không chia sẻ mã này cho bất kỳ ai.</p>
       </div>
     `;
     const res = await this.dispatchSend(
       to,
-      'Mã xác nhận tài khoản Photo Picker Pro',
+      'Mã xác nhận tài khoản MVD Tech & Design Studio',
       `Mã xác nhận của bạn là: ${code}. Mã này có hiệu lực trong 10 phút.`,
       html,
     );
@@ -323,11 +328,11 @@ export class EmailService {
 
     const res = await this.dispatchSend(
       to,
-      '[MVD ACADEMY] Thử nghiệm gửi Email thành công',
+      '[MVD TECH & DESIGN STUDIO] Thử nghiệm gửi Email thành công',
       `Chúc mừng! Cấu hình gửi email của bạn đã hoạt động chính xác qua dịch vụ ${providerName} lúc ${new Date().toLocaleString('vi-VN')}.`,
       `<div style="font-family: Arial, sans-serif; padding: 24px; border: 1px solid #10B981; border-radius: 8px; max-width: 500px;">
         <h2 style="color: #10B981; margin-top: 0;">🎉 Gửi Email Thử Nghiệm Thành Công!</h2>
-        <p>Hệ thống MVD Academy đã kết nối thành công với cổng gửi mail.</p>
+        <p>Hệ thống MVD Tech & Design Studio đã kết nối thành công với cổng gửi mail.</p>
         <p><strong>Dịch vụ sử dụng:</strong> ${providerName}</p>
         <p><strong>Thời gian:</strong> ${new Date().toLocaleString('vi-VN')}</p>
         <p><strong>Người nhận:</strong> ${to}</p>

@@ -33,6 +33,11 @@ export class AppController {
       title: '',
       subtitle: '',
     };
+    const welcomeScreen = {
+      title: 'MVD Tech & Design Studio',
+      viSubtitle: 'Chào mừng bạn đến với hệ sinh thái',
+      enSubtitle: 'Welcome to the ecosystem of',
+    };
 
     try {
       const configs = await this.prisma.systemConfig.findMany({
@@ -44,6 +49,9 @@ export class AppController {
               'launcher_banner_title',
               'launcher_banner_subtitle',
               'support_zalo_phone',
+              'welcome_screen_title',
+              'welcome_screen_vi_subtitle',
+              'welcome_screen_en_subtitle',
             ],
           },
         },
@@ -54,6 +62,9 @@ export class AppController {
         if (cfg.key === 'launcher_banner_title') launcherBanner.title = cfg.value;
         if (cfg.key === 'launcher_banner_subtitle') launcherBanner.subtitle = cfg.value;
         if (cfg.key === 'support_zalo_phone') supportZaloPhone = cfg.value.trim();
+        if (cfg.key === 'welcome_screen_title' && cfg.value?.trim()) welcomeScreen.title = cfg.value.trim();
+        if (cfg.key === 'welcome_screen_vi_subtitle' && cfg.value?.trim()) welcomeScreen.viSubtitle = cfg.value.trim();
+        if (cfg.key === 'welcome_screen_en_subtitle' && cfg.value?.trim()) welcomeScreen.enSubtitle = cfg.value.trim();
       }
     } catch {
       // Silently ignore if SystemConfig table doesn't exist yet
@@ -64,6 +75,7 @@ export class AppController {
       companyWebsiteUrl,
       supportZaloPhone,
       launcherBanner,
+      welcomeScreen,
     };
   }
 
