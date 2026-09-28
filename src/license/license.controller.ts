@@ -5,6 +5,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '@prisma/client';
 import { GenerateKeysDto, ActivateKeyDto, RequestKeyDto } from './dto/license.dto';
+import { RateLimitGuard, RateLimit } from '../common/rate-limit.guard';
 
 @Controller('license')
 export class LicenseController {
@@ -13,26 +14,37 @@ export class LicenseController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN)
   @Post('generate')
-  generateKeys(@Body() body: GenerateKeysDto) {
-    return this.licenseService.generateKeys(body.count, body.durationDays, body.keyType);
+  async generateKeys(@Body() body: GenerateKeysDto) {
+    const result = await this.licenseService.generateKeys(body.count, body.durationDays, body.targetApp, body.note);
+    return { success: true, data: result };
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN)
   @Get('keys')
-  getAllKeys() {
-    return this.licenseService.getAllKeys();
+  async getAllKeys() {
+    const result = await this.licenseService.getAllKeys();
+    return { success: true, data: result };
   }
 
-  @UseGuards(JwtAuthGuard)
+  // Chống dò key: key chỉ có 12 ký tự hex nên nếu không giới hạn tần suất thì bot
+  // có thể thử hàng nghìn key mỗi giây.
+  @UseGuards(JwtAuthGuard, RateLimitGuard)
+  @RateLimit({
+    limit: 10,
+    windowMs: 60_000,
+    message: 'Bạn đã thử kích hoạt key quá nhiều lần. Vui lòng chờ một phút rồi thử lại.',
+  })
   @Post('activate')
-  activateKey(@Req() req: any, @Body() body: ActivateKeyDto) {
-    return this.licenseService.activateKey(req.user.userId, body.key);
+  async activateKey(@Req() req: any, @Body() body: ActivateKeyDto) {
+    const result = await this.licenseService.activateKey(req.user.userId, body.key);
+    return { success: true, data: result };
   }
 
   @UseGuards(JwtAuthGuard)
   @Post('request')
-  requestKey(@Req() req: any, @Body() body: RequestKeyDto) {
-    return this.licenseService.requestKey(req.user.userId, body);
+  async requestKey(@Req() req: any, @Body() body: RequestKeyDto) {
+    const result = await this.licenseService.requestKey(req.user.userId, body);
+    return { success: true, data: result };
   }
 }

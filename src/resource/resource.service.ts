@@ -32,7 +32,7 @@ export class ResourceService {
       ];
     }
 
-    return this.prisma.resource.findMany({
+    const list = await this.prisma.resource.findMany({
       where,
       select: {
         id: true,
@@ -57,6 +57,64 @@ export class ResourceService {
       },
       orderBy: [{ order: 'asc' }, { createdAt: 'desc' }],
     });
+
+    const keepLinks = await this.isLegacyCompatEnabled();
+    return list.map((item) => this.stripDownloadUrl(item, keepLinks));
+  }
+
+  /**
+   * SECURITY: KHÔNG trả `downloadUrl` (link Google Drive) ra danh sách công khai.
+   * Nếu trả về thì mọi người đều lấy được link tải trực tiếp mà không cần mua gói,
+   * làm vô hiệu hoá toàn bộ cơ chế kiểm tra quyền ở endpoint tải. Client chỉ cần biết
+   * "có link hay không" để hiển thị nút; link thật lấy qua endpoint có xác thực.
+   *
+   * TƯƠNG THÍCH: app desktop <= 2.4.4 đọc `downloadUrl` ngay từ danh sách này và gọi
+   * /download KHÔNG kèm token. Vì bản cập nhật app là tuỳ chọn (người dùng bấm "để
+   * sau" được) nên nếu siết ngay thì toàn bộ máy chưa cập nhật mất chức năng tải.
+   * Cờ `legacy_resource_compat` (mặc định BẬT) giữ hành vi cũ cho tới khi admin tự
+   * tắt trong trang quản trị — lúc đó lỗ hổng mới thực sự được đóng.
+   */
+  private stripDownloadUrl<T extends { downloadUrl?: string | null }>(
+    item: T,
+    keepLink: boolean,
+  ) {
+    const { downloadUrl, ...rest } = item;
+    const base = { ...rest, hasDownloadUrl: !!downloadUrl };
+    return keepLink ? { ...base, downloadUrl } : base;
+  }
+
+  /** Cache ngắn để không phải truy vấn SystemConfig ở mỗi lượt xem danh sách. */
+  private legacyCompatCache: { value: boolean; expiresAt: number } | null = null;
+
+  /**
+   * `legacy_resource_compat`: BẬT (mặc định) = vẫn phục vụ app cũ. TẮT = chỉ client đã
+   * đăng nhập và còn quyền mới lấy được link tải.
+   */
+  async isLegacyCompatEnabled(): Promise<boolean> {
+    const now = Date.now();
+    if (this.legacyCompatCache && this.legacyCompatCache.expiresAt > now) {
+      return this.legacyCompatCache.value;
+    }
+
+    let value = true;
+    try {
+      const row = await this.prisma.systemConfig.findUnique({
+        where: { key: 'legacy_resource_compat' },
+      });
+      // Chỉ tắt khi admin ghi rõ 'false'. Thiếu row => mặc định BẬT để một lần deploy
+      // backend không bao giờ tự làm hỏng app đang chạy ngoài thực tế.
+      if (row) value = row.value.trim().toLowerCase() !== 'false';
+    } catch {
+      value = true;
+    }
+
+    this.legacyCompatCache = { value, expiresAt: now + 30_000 };
+    return value;
+  }
+
+  /** Gọi khi admin đổi cấu hình để cờ có hiệu lực ngay, không phải chờ hết cache. */
+  invalidateLegacyCompatCache() {
+    this.legacyCompatCache = null;
   }
 
   /**
@@ -123,7 +181,7 @@ export class ResourceService {
       throw new NotFoundException('Không tìm thấy tài nguyên');
     }
 
-    return resource;
+    return this.stripDownloadUrl(resource, await this.isLegacyCompatEnabled());
   }
 
   /**

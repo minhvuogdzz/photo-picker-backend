@@ -16,6 +16,9 @@ import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { ShowcaseService } from './showcase.service';
 import { UpdateShowcaseDto, UpdateShowcaseAlbumDto } from './dto/showcase.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { Role } from '@prisma/client';
 
 @Controller()
 export class ShowcaseController {
@@ -41,7 +44,8 @@ export class ShowcaseController {
   /**
    * Admin: Get all showcase albums (including hidden ones)
    */
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN)
   @Get('admin/showcase/albums')
   @Header('Cache-Control', 'no-cache, no-store, must-revalidate')
   @Header('Pragma', 'no-cache')
@@ -54,7 +58,8 @@ export class ShowcaseController {
   /**
    * Admin: Upload a single image to Cloudinary (Bypasses Vercel Serverless Function body size limits)
    */
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN)
   @Post('admin/showcase/upload-single')
   @UseInterceptors(
     FileInterceptor('image', {
@@ -74,7 +79,8 @@ export class ShowcaseController {
    * Admin: Create a new Showcase Album. Supports both JSON body with pre-uploaded Cloudinary images,
    * or direct multipart files upload (fallback).
    */
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN)
   @Post('admin/showcase/albums')
   @UseInterceptors(
     FilesInterceptor('images', 20, {
@@ -126,7 +132,8 @@ export class ShowcaseController {
   /**
    * Admin: Update Showcase Album title, order, or visibility (isActive)
    */
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN)
   @Patch('admin/showcase/albums/:id')
   async updateAlbum(
     @Param('id') id: string,
@@ -139,7 +146,8 @@ export class ShowcaseController {
   /**
    * Admin: Delete entire Showcase Album from Cloudinary & DB
    */
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN)
   @Delete('admin/showcase/albums/:id')
   async deleteAlbum(@Param('id') id: string) {
     const result = await this.showcaseService.deleteAlbum(id);
@@ -151,7 +159,8 @@ export class ShowcaseController {
   /**
    * Admin: Get all showcase photos (including hidden ones)
    */
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN)
   @Get('admin/showcase')
   @Header('Cache-Control', 'no-cache, no-store, must-revalidate')
   @Header('Pragma', 'no-cache')
@@ -165,7 +174,8 @@ export class ShowcaseController {
    * Admin: Upload multiple photos to Cloudinary and add to Showcase album
    * Supports up to 20 compressed files at once, under 1.5MB each.
    */
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN)
   @Post('admin/showcase/upload')
   @UseInterceptors(
     FilesInterceptor('images', 20, {
@@ -193,7 +203,8 @@ export class ShowcaseController {
   /**
    * Admin: Update title, order or visibility
    */
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN)
   @Patch('admin/showcase/:id')
   async updateShowcase(
     @Param('id') id: string,
@@ -206,7 +217,8 @@ export class ShowcaseController {
   /**
    * Admin: Delete photo from Cloudinary & DB
    */
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN)
   @Delete('admin/showcase/:id')
   async deleteShowcase(@Param('id') id: string) {
     const result = await this.showcaseService.deleteShowcaseImage(id);

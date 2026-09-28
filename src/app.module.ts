@@ -13,6 +13,7 @@ import { SyncModule } from './sync/sync.module';
 import { CloudinaryModule } from './cloudinary/cloudinary.module';
 import { ShowcaseModule } from './showcase/showcase.module';
 import { ResourceModule } from './resource/resource.module';
+import { PaymentModule } from './payment/payment.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { ResourceModule } from './resource/resource.module';
     CloudinaryModule,
     ShowcaseModule,
     ResourceModule,
+    PaymentModule,
     ScheduleModule.forRoot(),
   ],
   controllers: [AppController],

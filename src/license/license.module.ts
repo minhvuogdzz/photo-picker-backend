@@ -8,6 +8,7 @@ import { AuthModule } from '../auth/auth.module';
 @Module({
   imports: [PrismaModule, EmailModule, AuthModule],
   controllers: [LicenseController],
-  providers: [LicenseService]
+  providers: [LicenseService],
+  exports: [LicenseService],
 })
 export class LicenseModule {}
