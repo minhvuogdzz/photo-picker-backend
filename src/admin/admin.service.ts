@@ -306,6 +306,12 @@ export class AdminService {
         validate: (v) => /^\d+$/.test(v) && parseInt(v, 10) > 0 && parseInt(v, 10) <= 10080,
         hint: 'số nguyên từ 1 đến 10080',
       },
+      support_zalo_phone: {
+        label: 'Số Zalo hỗ trợ',
+        // Cho phép 0/+84, dấu cách, chấm, gạch ngang — nhưng phải ra đúng 9-11 chữ số.
+        validate: (v) => /^(?:\+?84|0)[0-9][\s.-]*(?:[0-9][\s.-]*){7,9}$/.test(v),
+        hint: 'số điện thoại Việt Nam hợp lệ, ví dụ 0869528304',
+      },
       legacy_resource_compat: {
         label: 'Chế độ tương thích app cũ (Kho Tài Nguyên)',
         validate: (v) => v === 'true' || v === 'false',

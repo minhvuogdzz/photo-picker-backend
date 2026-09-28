@@ -25,6 +25,9 @@ export class AppController {
 
     // Fetch public configurations from SystemConfig (admin-configurable)
     let companyWebsiteUrl = '';
+    // Số Zalo hỗ trợ — admin tự cấu hình. Không đặt mặc định: thà không hiện dòng hỗ
+    // trợ còn hơn hiện một số điện thoại của người lạ.
+    let supportZaloPhone = '';
     const launcherBanner = {
       badge: '',
       title: '',
@@ -40,6 +43,7 @@ export class AppController {
               'launcher_banner_badge',
               'launcher_banner_title',
               'launcher_banner_subtitle',
+              'support_zalo_phone',
             ],
           },
         },
@@ -49,6 +53,7 @@ export class AppController {
         if (cfg.key === 'launcher_banner_badge') launcherBanner.badge = cfg.value;
         if (cfg.key === 'launcher_banner_title') launcherBanner.title = cfg.value;
         if (cfg.key === 'launcher_banner_subtitle') launcherBanner.subtitle = cfg.value;
+        if (cfg.key === 'support_zalo_phone') supportZaloPhone = cfg.value.trim();
       }
     } catch {
       // Silently ignore if SystemConfig table doesn't exist yet
@@ -57,6 +62,7 @@ export class AppController {
     return {
       sessionDurationMinutes,
       companyWebsiteUrl,
+      supportZaloPhone,
       launcherBanner,
     };
   }
