@@ -3,7 +3,7 @@ import * as nodemailer from 'nodemailer';
 import { PrismaService } from '../prisma/prisma.service';
 
 export interface EmailConfig {
-  provider: 'resend' | 'brevo' | 'smtp';
+  provider: 'resend' | 'brevo' | 'smtp' | 'auto';
   resendApiKey: string;
   brevoApiKey: string;
   smtpUser: string;
@@ -252,7 +252,15 @@ export class EmailService {
         text,
         html,
       );
-      return { success: ok, provider: 'resend', error: ok ? undefined : 'Resend API từ chối gửi thư.' };
+      if (ok) return { success: true, provider: 'resend' };
+
+      // Fallback nếu Resend thất bại (do chưa verify domain hoặc bị hạn chế)
+      if (config.brevoApiKey) {
+        this.logger.warn(`[Resend] Gửi thất bại tới ${to}, đang tự động chuyển hướng qua Brevo...`);
+        const brevoOk = await this.sendViaBrevo(config.brevoApiKey, config.fromEmail, config.fromName, to, subject, text, html);
+        if (brevoOk) return { success: true, provider: 'brevo' };
+      }
+      return { success: false, provider: 'resend', error: 'Resend API từ chối gửi thư (chưa xác minh tên miền trên resend.com/domains).' };
     }
 
     if (config.provider === 'brevo') {
@@ -268,10 +276,35 @@ export class EmailService {
         text,
         html,
       );
-      return { success: ok, provider: 'brevo', error: ok ? undefined : 'Brevo API từ chối gửi thư.' };
+      if (ok) return { success: true, provider: 'brevo' };
+
+      // Fallback qua Resend
+      if (config.resendApiKey) {
+        this.logger.warn(`[Brevo] Gửi thất bại tới ${to}, đang tự động chuyển hướng qua Resend...`);
+        const resendOk = await this.sendViaResend(config.resendApiKey, config.fromEmail, config.fromName, to, subject, text, html);
+        if (resendOk) return { success: true, provider: 'resend' };
+      }
+      return { success: false, provider: 'brevo', error: 'Brevo API từ chối gửi thư.' };
     }
 
-    // SMTP
+    // Provider auto: Ưu tiên Brevo -> Resend -> SMTP
+    if (config.provider === 'auto') {
+      if (config.brevoApiKey) {
+        const ok = await this.sendViaBrevo(config.brevoApiKey, config.fromEmail, config.fromName, to, subject, text, html);
+        if (ok) return { success: true, provider: 'brevo' };
+      }
+      if (config.resendApiKey) {
+        const ok = await this.sendViaResend(config.resendApiKey, config.fromEmail, config.fromName, to, subject, text, html);
+        if (ok) return { success: true, provider: 'resend' };
+      }
+      if (config.smtpUser && config.smtpPass) {
+        const ok = await this.sendViaSmtp(config.smtpUser, config.smtpPass, config.fromName, to, subject, text, html, attachments);
+        if (ok) return { success: true, provider: 'smtp' };
+      }
+      return { success: false, provider: 'auto', error: 'Tất cả các cổng gửi email đều thất bại.' };
+    }
+
+    // SMTP truyền thống
     const ok = await this.sendViaSmtp(
       config.smtpUser,
       config.smtpPass,

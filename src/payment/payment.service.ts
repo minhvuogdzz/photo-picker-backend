@@ -733,4 +733,23 @@ export class PaymentService {
       key: keyString,
     };
   }
+
+  // 9. Admin: Gửi lại email xác nhận kèm mã key cho khách hàng
+  async resendOrderEmail(orderId: string) {
+    const order = await this.prisma.order.findUnique({ where: { id: orderId } });
+    if (!order) {
+      throw new NotFoundException('Không tìm thấy đơn hàng');
+    }
+
+    if (!order.generatedKey) {
+      throw new BadRequestException('Đơn hàng chưa có mã key để gửi email');
+    }
+
+    await this.sendLicenseEmail(order, order.generatedKey, order.paidAmount || order.amount);
+
+    return {
+      success: true,
+      message: `Đã kích hoạt gửi lại email xác nhận kèm mã key tới ${order.buyerEmail}!`,
+    };
+  }
 }

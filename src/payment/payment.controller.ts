@@ -101,4 +101,14 @@ export class PaymentController {
   async manualApproveOrder(@Param('id') orderId: string) {
     return this.paymentService.manualApproveOrder(orderId);
   }
+
+  /**
+   * Admin: Gửi lại email xác nhận kèm mã bản quyền cho khách
+   */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN)
+  @Post('admin/orders/:id/resend-email')
+  async resendOrderEmail(@Param('id') orderId: string) {
+    return this.paymentService.resendOrderEmail(orderId);
+  }
 }
