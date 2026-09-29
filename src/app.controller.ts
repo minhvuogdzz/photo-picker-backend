@@ -38,6 +38,12 @@ export class AppController {
       viSubtitle: 'Chào mừng bạn đến với hệ sinh thái',
       enSubtitle: 'Welcome to the ecosystem of',
     };
+    const announcementPopup = {
+      enabled: false,
+      title: 'Thông Báo Từ Nhà Phát Triển',
+      htmlContent: '',
+      updatedAt: '',
+    };
 
     try {
       const configs = await this.prisma.systemConfig.findMany({
@@ -52,6 +58,10 @@ export class AppController {
               'welcome_screen_title',
               'welcome_screen_vi_subtitle',
               'welcome_screen_en_subtitle',
+              'announcement_popup_enabled',
+              'announcement_popup_title',
+              'announcement_popup_html',
+              'announcement_popup_updated_at',
             ],
           },
         },
@@ -65,6 +75,10 @@ export class AppController {
         if (cfg.key === 'welcome_screen_title' && cfg.value?.trim()) welcomeScreen.title = cfg.value.trim();
         if (cfg.key === 'welcome_screen_vi_subtitle' && cfg.value?.trim()) welcomeScreen.viSubtitle = cfg.value.trim();
         if (cfg.key === 'welcome_screen_en_subtitle' && cfg.value?.trim()) welcomeScreen.enSubtitle = cfg.value.trim();
+        if (cfg.key === 'announcement_popup_enabled') announcementPopup.enabled = cfg.value === 'true';
+        if (cfg.key === 'announcement_popup_title' && cfg.value?.trim()) announcementPopup.title = cfg.value.trim();
+        if (cfg.key === 'announcement_popup_html') announcementPopup.htmlContent = cfg.value || '';
+        if (cfg.key === 'announcement_popup_updated_at') announcementPopup.updatedAt = cfg.value || '';
       }
     } catch {
       // Silently ignore if SystemConfig table doesn't exist yet
@@ -76,6 +90,7 @@ export class AppController {
       supportZaloPhone,
       launcherBanner,
       welcomeScreen,
+      announcementPopup,
     };
   }
 
