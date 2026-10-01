@@ -14,6 +14,7 @@ import { PrismaService } from '../prisma/prisma.service';
 interface SocketTokenPayload {
   readonly sub?: string;
   readonly deviceId?: string;
+  readonly iat?: number;
 }
 
 @WebSocketGateway({
@@ -65,6 +66,27 @@ export class SyncGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const deviceId = payload.deviceId;
       if (!userId || !deviceId) {
         throw new Error('Missing socket identity');
+      }
+
+      // Daily Midnight Reset (00:00:00 GMT+7): Reject sockets with tokens issued before today's VN midnight
+      if (payload.iat) {
+        const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
+        const nowMs = Date.now();
+        const vnNow = new Date(nowMs + VN_OFFSET_MS);
+        const vnStartOfDayUtc = Date.UTC(
+          vnNow.getUTCFullYear(),
+          vnNow.getUTCMonth(),
+          vnNow.getUTCDate(),
+          0, 0, 0, 0
+        );
+        const vnStartOfDayMs = vnStartOfDayUtc - VN_OFFSET_MS;
+        const tokenIssuedMs = payload.iat * 1000;
+
+        if (tokenIssuedMs < vnStartOfDayMs) {
+          client.emit('midnightReset', { message: 'Daily session expired at midnight VN' });
+          client.disconnect(true);
+          return { event: 'registered', data: { success: false } };
+        }
       }
 
       const user = await this.prisma.user.findUnique({

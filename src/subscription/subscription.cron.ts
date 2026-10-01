@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { SyncGateway } from '../sync/sync.gateway';
 
@@ -10,6 +11,19 @@ export class SubscriptionCron {
     private readonly prisma: PrismaService,
     private readonly syncGateway: SyncGateway,
   ) {}
+
+  @Cron('0 0 * * *', { timeZone: 'Asia/Ho_Chi_Minh' })
+  async handleMidnightReset() {
+    this.logger.log('0h00 VN Midnight reached: broadcasting midnightReset to all connected clients');
+    try {
+      this.syncGateway.broadcastEvent('midnightReset', {
+        timestamp: Date.now(),
+        message: 'Daily session expired at midnight VN (00:00:00 GMT+7)',
+      });
+    } catch (err) {
+      this.logger.error('Failed to broadcast midnightReset event', err);
+    }
+  }
 
   // In Vercel serverless environment, in-process 10-second timers keep functions warm
   // and drain CPU/memory quota without reaching clients (since WebSockets do not persist on serverless).

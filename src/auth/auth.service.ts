@@ -344,6 +344,25 @@ export class AuthService implements OnApplicationBootstrap {
       const userId = payload.sub || payload.userId;
       const deviceId = payload.deviceId;
 
+      // Daily Midnight Reset (00:00:00 GMT+7): All user sessions expire at midnight Vietnam time
+      if (payload.iat) {
+        const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
+        const nowMs = Date.now();
+        const vnNow = new Date(nowMs + VN_OFFSET_MS);
+        const vnStartOfDayUtc = Date.UTC(
+          vnNow.getUTCFullYear(),
+          vnNow.getUTCMonth(),
+          vnNow.getUTCDate(),
+          0, 0, 0, 0
+        );
+        const vnStartOfDayMs = vnStartOfDayUtc - VN_OFFSET_MS;
+        const tokenIssuedMs = payload.iat * 1000;
+
+        if (tokenIssuedMs < vnStartOfDayMs) {
+          throw new UnauthorizedException('SESSION_EXPIRED');
+        }
+      }
+
       const user = await this.prisma.user.findUnique({
         where: { id: userId },
         include: { subscription: true },
@@ -399,7 +418,10 @@ export class AuthService implements OnApplicationBootstrap {
         deviceId,
         lastSyncAt: new Date().toISOString(),
       };
-    } catch {
+    } catch (error) {
+      if (error instanceof UnauthorizedException) {
+        throw error;
+      }
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
   }
